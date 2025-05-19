@@ -1,0 +1,45 @@
+name: Build & Release - .NET 8 WPF
+
+on:
+  push:
+    tags:
+      - 'v*'   # Triggers on version tags like v1.0, v1.1.2 etc.
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    env:
+      Solution_Name: CsvMapper.sln
+      Project_Path: CsvMapper.csproj
+      Output_Dir: CsvMapper\bin\Release\net8.0-windows
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 8 SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Restore NuGet packages
+      run: dotnet restore ${{ env.Solution_Name }}
+
+    - name: Build in Release mode
+      run: msbuild ${{ env.Solution_Name }} /p:Configuration=Release
+
+    - name: Zip release output
+      run: Compress-Archive -Path ${{ env.Output_Dir }}\* -DestinationPath CsvMapper-${{ github.ref_name }}.zip
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        files: CsvMapper-${{ github.ref_name }}.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
