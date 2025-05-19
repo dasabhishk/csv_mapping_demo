@@ -1,0 +1,47 @@
+name: .NET 8 WPF Build
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+
+    env:
+      Solution_Name: CsvMapper.sln
+      Project_Path: CsvMapper.csproj
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 8 SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Restore NuGet packages
+      run: dotnet restore ${{ env.Solution_Name }}
+
+    - name: Build the solution
+      run: msbuild ${{ env.Solution_Name }} /p:Configuration=${{ matrix.configuration }}
+      env:
+        Configuration: ${{ matrix.configuration }}
+
+    - name: Upload build output
+      uses: actions/upload-artifact@v4
+      with:
+        name: WPF Build - ${{ matrix.configuration }}
+        path: |
+          bin\${{ matrix.configuration }}\
+          CsvMapper\bin\${{ matrix.configuration }}\
