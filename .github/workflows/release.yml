@@ -12,7 +12,7 @@ jobs:
     env:
       Solution_Name: CsvMapper.sln
       Project_Path: CsvMapper.csproj
-      Output_Dir: CsvMapper\bin\Release\net8.0-windows
+      Output_Dir: bin\Release\net8.0-windows
 
     steps:
     - name: Checkout repository
