@@ -1,0 +1,193 @@
+<UserControl x:Class="CsvMapper.Views.MappingView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:CsvMapper.Views"
+             xmlns:vm="clr-namespace:CsvMapper.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="850">
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Loading overlay -->
+        <Grid Grid.RowSpan="5" 
+              Background="#80000000" 
+              Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="Loading..." Foreground="White" FontSize="16" Margin="0,0,0,10"/>
+                <ProgressBar IsIndeterminate="True" Width="200" Height="10" />
+            </StackPanel>
+        </Grid>
+        
+        <!-- CSV File Selection -->
+        <GroupBox Grid.Row="0" Header="CSV File" Margin="0,0,0,10" Padding="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBox Grid.Column="0" 
+                         Text="{Binding SelectedCsvFilePath}" 
+                         IsReadOnly="True"
+                         Margin="0,0,10,0"/>
+                
+                <Button Grid.Column="1" 
+                        Content="Browse" 
+                        Command="{Binding BrowseCsvFileCommand}"
+                        Width="80"/>
+            </Grid>
+        </GroupBox>
+        
+        <!-- Schema File Selection -->
+        <GroupBox Grid.Row="1" Header="Schema File" Margin="0,0,0,10" Padding="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBox Grid.Column="0" 
+                         Text="{Binding SelectedSchemaFilePath}" 
+                         IsReadOnly="True"
+                         Margin="0,0,10,0"/>
+                
+                <Button Grid.Column="1" 
+                        Content="Browse" 
+                        Command="{Binding BrowseSchemaFileCommand}"
+                        Width="80"
+                        Margin="0,0,10,0"/>
+                
+                <Button Grid.Column="2" 
+                        Content="Load" 
+                        Command="{Binding LoadSchemaFileCommand}"
+                        Width="80"/>
+            </Grid>
+        </GroupBox>
+        
+        <!-- Table Selection -->
+        <Grid Grid.Row="2" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <TextBlock Grid.Column="0" 
+                       Text="Select Table:" 
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"/>
+            
+            <ComboBox Grid.Column="1" 
+                      ItemsSource="{Binding AvailableTables}"
+                      SelectedItem="{Binding SelectedTableName}"
+                      IsEnabled="{Binding IsSchemaLoaded}"
+                      Margin="0,0,10,0"/>
+            
+            <Button Grid.Column="2" 
+                    Content="Auto-Match Columns" 
+                    Command="{Binding AutoMatchColumnsCommand}"
+                    IsEnabled="{Binding IsCsvLoaded}"/>
+        </Grid>
+        
+        <!-- Column Mappings DataGrid -->
+        <DataGrid Grid.Row="3" 
+                  ItemsSource="{Binding ColumnMappings}"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  IsReadOnly="False"
+                  HeadersVisibility="Column"
+                  Margin="0,0,0,10">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Database Column" 
+                                    Binding="{Binding DbColumn.Name}" 
+                                    IsReadOnly="True"
+                                    Width="120"/>
+                
+                <DataGridTextColumn Header="DB Data Type" 
+                                    Binding="{Binding DbColumn.DataType}" 
+                                    IsReadOnly="True"
+                                    Width="100"/>
+                
+                <DataGridTemplateColumn Header="CSV Column" Width="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox ItemsSource="{Binding AvailableCsvColumns}"
+                                      SelectedItem="{Binding SelectedCsvColumn, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEnabled="{Binding DataContext.IsCsvLoaded, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                      Width="140"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                
+                <DataGridTextColumn Header="Inferred Type" 
+                                    Binding="{Binding InferredType}" 
+                                    IsReadOnly="True"
+                                    Width="100"/>
+                
+                <DataGridTemplateColumn Header="Sample Values" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ItemsControl ItemsSource="{Binding SampleValues}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Margin="0,0,0,2"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                
+                <DataGridTemplateColumn Header="Validation" Width="180">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding ValidationError}" 
+                                       Foreground="Red"
+                                       TextWrapping="Wrap"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+            
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsValid}" Value="False">
+                            <Setter Property="Background" Value="#FFEBEE"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+        </DataGrid>
+        
+        <!-- Status and Actions -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <TextBlock Grid.Column="0" 
+                       Text="{Binding StatusMessage}" 
+                       VerticalAlignment="Center"/>
+            
+            <Button Grid.Column="1" 
+                    Content="Save Mapping" 
+                    Command="{Binding SaveMappingsCommand}"
+                    IsEnabled="{Binding CanSaveMapping}"
+                    Width="120"
+                    Height="30"/>
+        </Grid>
+    </Grid>
+</UserControl>
