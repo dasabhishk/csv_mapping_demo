@@ -3,7 +3,7 @@ name: Build & Release - .NET 8 WPF
 on:
   push:
     tags:
-      - 'v*'   # Triggers on version tags like v1.0, v1.1.2 etc.
+      - 'v*'   # Triggers on version tags like v1.0.0, v1.1.2, etc.
 
 jobs:
   build:
@@ -32,14 +32,21 @@ jobs:
     - name: Build in Release mode
       run: msbuild ${{ env.Solution_Name }} /p:Configuration=Release
 
+    - name: Create release directory
+      run: New-Item -ItemType Directory -Path release -Force
+
     - name: Zip release output
-      run: Compress-Archive -Path ${{ env.Output_Dir }}\* -DestinationPath CsvMapper-${{ github.ref_name }}.zip
+      run: |
+        Compress-Archive -Path "${{ env.Output_Dir }}\*" -DestinationPath "release\CsvMapper-${{ github.ref_name }}.zip"
+
+    - name: Verify .zip file exists
+      run: dir release
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
-        files: CsvMapper-${{ github.ref_name }}.zip
+        files: release/CsvMapper-${{ github.ref_name }}.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
