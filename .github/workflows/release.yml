@@ -3,7 +3,10 @@ name: Build & Release - .NET 8 WPF
 on:
   push:
     tags:
-      - 'v*'   # Triggers on version tags like v1.0.0, v1.1.2, etc.
+      - 'v*'   # Triggers on tags like v1.0.0, v1.1.2, etc.
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,38 +18,40 @@ jobs:
       Output_Dir: bin\Release\net8.0-windows
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup .NET 8 SDK
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 8.0.x
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
 
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
 
-    - name: Restore NuGet packages
-      run: dotnet restore ${{ env.Solution_Name }}
+      - name: Restore NuGet packages
+        run: dotnet restore ${{ env.Solution_Name }}
 
-    - name: Build in Release mode
-      run: msbuild ${{ env.Solution_Name }} /p:Configuration=Release
+      - name: Build in Release mode
+        run: msbuild ${{ env.Solution_Name }} /p:Configuration=Release
 
-    - name: Create release directory
-      run: New-Item -ItemType Directory -Path release -Force
+      - name: Create release directory
+        run: New-Item -ItemType Directory -Path release -Force
 
-    - name: Zip release output
-      run: |
-        Compress-Archive -Path "${{ env.Output_Dir }}\*" -DestinationPath "release\CsvMapper-${{ github.ref_name }}.zip"
+      - name: Copy EXE to release folder
+        run: |
+          Get-ChildItem -Path "${{ env.Output_Dir }}" -Filter "*.exe" | ForEach-Object {
+            Copy-Item $_.FullName -Destination "release\$($_.Name)"
+          }
 
-    - name: Verify .zip file exists
-      run: dir release
+      - name: List files to be uploaded
+        run: dir release
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
-        files: release/CsvMapper-${{ github.ref_name }}.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: release/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
