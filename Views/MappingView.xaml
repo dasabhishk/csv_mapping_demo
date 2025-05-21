@@ -6,19 +6,25 @@
              xmlns:local="clr-namespace:CsvMapper.Views"
              xmlns:vm="clr-namespace:CsvMapper.ViewModels"
              mc:Ignorable="d" 
-             d:DesignHeight="600" d:DesignWidth="850">
+             d:DesignHeight="650" d:DesignWidth="900"
+             Loaded="UserControl_Loaded">
+    
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
     
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/> <!-- Schema File -->
+            <RowDefinition Height="Auto"/> <!-- CSV Types -->
+            <RowDefinition Height="Auto"/> <!-- Current Mapping Info -->
+            <RowDefinition Height="Auto"/> <!-- CSV File Selection -->
+            <RowDefinition Height="*"/>     <!-- Mapping Grid -->
+            <RowDefinition Height="Auto"/> <!-- Status and Actions -->
         </Grid.RowDefinitions>
 
         <!-- Loading overlay -->
-        <Grid Grid.RowSpan="5" 
+        <Grid Grid.RowSpan="6" 
               Background="#80000000" 
               Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -27,31 +33,12 @@
             </StackPanel>
         </Grid>
         
-        <!-- CSV File Selection -->
-        <GroupBox Grid.Row="0" Header="CSV File" Margin="0,0,0,10" Padding="10">
+        <!-- Schema File Selection -->
+        <GroupBox Grid.Row="0" Header="Schema File" Margin="10,10,10,5" Padding="10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                
-                <TextBox Grid.Column="0" 
-                         Text="{Binding SelectedCsvFilePath}" 
-                         IsReadOnly="True"
-                         Margin="0,0,10,0"/>
-                
-                <Button Grid.Column="1" 
-                        Content="Browse" 
-                        Command="{Binding BrowseCsvFileCommand}"
-                        Width="80"/>
-            </Grid>
-        </GroupBox>
-        
-        <!-- Schema File Selection -->
-        <GroupBox Grid.Row="1" Header="Schema File" Margin="0,0,0,10" Padding="10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -70,44 +57,123 @@
                 <Button Grid.Column="2" 
                         Content="Load" 
                         Command="{Binding LoadSchemaFileCommand}"
-                        Width="80"/>
+                        Width="80"
+                        Margin="0,0,10,0"/>
+                
+                <Button Grid.Column="3" 
+                        Content="New Session" 
+                        Command="{Binding InitializeNewSessionCommand}"
+                        Width="100"/>
             </Grid>
         </GroupBox>
         
-        <!-- Table Selection -->
-        <Grid Grid.Row="2" Margin="0,0,0,10">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            
-            <TextBlock Grid.Column="0" 
-                       Text="Select Table:" 
-                       VerticalAlignment="Center"
-                       Margin="0,0,10,0"/>
-            
-            <ComboBox Grid.Column="1" 
-                      ItemsSource="{Binding AvailableTables}"
-                      SelectedItem="{Binding SelectedTableName}"
-                      IsEnabled="{Binding IsSchemaLoaded}"
-                      Margin="0,0,10,0"/>
-            
-            <Button Grid.Column="2" 
-                    Content="Auto-Match Columns" 
-                    Command="{Binding AutoMatchColumnsCommand}"
-                    IsEnabled="{Binding IsCsvLoaded}"/>
-        </Grid>
+        <!-- CSV Type Selection -->
+        <GroupBox Grid.Row="1" Header="CSV Type Selection" Margin="10,5,10,5" Padding="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBlock Grid.Column="0" 
+                           Text="Select CSV Type:" 
+                           VerticalAlignment="Center"
+                           Margin="0,0,10,0"/>
+                
+                <ComboBox Grid.Column="1" 
+                          ItemsSource="{Binding AvailableCsvTypes}"
+                          SelectedItem="{Binding SelectedCsvType}"
+                          IsEnabled="{Binding IsSchemaLoaded}"/>
+            </Grid>
+        </GroupBox>
+        
+        <!-- Current Mapping Information -->
+        <GroupBox Grid.Row="2" Header="Mapping Status" Margin="10,5,10,5" Padding="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <StackPanel Grid.Column="0" Orientation="Vertical" Margin="0,0,20,0">
+                    <TextBlock Text="PatientStudy CSV:" FontWeight="SemiBold"/>
+                    <TextBlock Text="SeriesInstance CSV:" FontWeight="SemiBold" Margin="0,5,0,0"/>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="1" Orientation="Vertical">
+                    <TextBlock>
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0} ({1})">
+                                <Binding Path="MappingTypes[0].IsCsvLoaded" Converter="{StaticResource BooleanYesNoConverter}" TargetNullValue="Not started" FallbackValue="Not started"/>
+                                <Binding Path="MappingTypes[0].IsValid" Converter="{StaticResource BooleanValidInvalidConverter}" TargetNullValue="" FallbackValue=""/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                    <TextBlock Margin="0,5,0,0">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0} ({1})">
+                                <Binding Path="MappingTypes[1].IsCsvLoaded" Converter="{StaticResource BooleanYesNoConverter}" TargetNullValue="Not started" FallbackValue="Not started"/> 
+                                <Binding Path="MappingTypes[1].IsValid" Converter="{StaticResource BooleanValidInvalidConverter}" TargetNullValue="" FallbackValue=""/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+                
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Content="Switch to PatientStudy" 
+                            Command="{Binding SwitchMappingTypeCommand}"
+                            CommandParameter="{Binding MappingTypes[0]}"
+                            Margin="0,0,10,0"
+                            Width="150"
+                            Visibility="{Binding MappingTypes[0], Converter={StaticResource NullToInvisibleConverter}}"/>
+                    
+                    <Button Content="Switch to SeriesInstance" 
+                            Command="{Binding SwitchMappingTypeCommand}"
+                            CommandParameter="{Binding MappingTypes[1]}"
+                            Width="150"
+                            Visibility="{Binding MappingTypes[1], Converter={StaticResource NullToInvisibleConverter}}"/>
+                </StackPanel>
+            </Grid>
+        </GroupBox>
+        
+        <!-- CSV File Selection for Current Type -->
+        <GroupBox Grid.Row="3" Header="{Binding CurrentMappingType.CsvType, StringFormat='CSV File for {0}'}" Margin="10,5,10,5" Padding="10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBox Grid.Column="0" 
+                         Text="{Binding CurrentMappingType.CsvFilePath}" 
+                         IsReadOnly="True"
+                         Margin="0,0,10,0"/>
+                
+                <Button Grid.Column="1" 
+                        Content="Browse" 
+                        Command="{Binding BrowseCsvFileCommand}"
+                        Width="80"
+                        Margin="0,0,10,0"/>
+                
+                <Button Grid.Column="2" 
+                        Content="Auto-Match Columns" 
+                        Command="{Binding AutoMatchColumnsCommand}"
+                        IsEnabled="{Binding CurrentMappingType.IsCsvLoaded}"
+                        Width="150"/>
+            </Grid>
+        </GroupBox>
         
         <!-- Column Mappings DataGrid -->
-        <DataGrid Grid.Row="3" 
+        <DataGrid Grid.Row="4" 
                   ItemsSource="{Binding ColumnMappings}"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
                   IsReadOnly="False"
                   HeadersVisibility="Column"
-                  Margin="0,0,0,10">
+                  Margin="10,5,10,5">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Database Column" 
                                     Binding="{Binding DbColumn.Name}" 
@@ -124,7 +190,7 @@
                         <DataTemplate>
                             <ComboBox ItemsSource="{Binding AvailableCsvColumns}"
                                       SelectedItem="{Binding SelectedCsvColumn, UpdateSourceTrigger=PropertyChanged}"
-                                      IsEnabled="{Binding DataContext.IsCsvLoaded, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                      IsEnabled="{Binding DataContext.CurrentMappingType.IsCsvLoaded, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                       Width="140"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
@@ -172,7 +238,7 @@
         </DataGrid>
         
         <!-- Status and Actions -->
-        <Grid Grid.Row="4">
+        <Grid Grid.Row="5" Margin="10,5,10,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -183,7 +249,7 @@
                        VerticalAlignment="Center"/>
             
             <Button Grid.Column="1" 
-                    Content="Save Mapping" 
+                    Content="Save All Mappings" 
                     Command="{Binding SaveMappingsCommand}"
                     IsEnabled="{Binding CanSaveMapping}"
                     Width="120"

@@ -73,7 +73,7 @@ namespace CsvMapper.Services
         }
 
         /// <summary>
-        /// Saves mapping results to a JSON file
+        /// Saves a single mapping result to a JSON file
         /// </summary>
         /// <param name="mappingResult">The mapping result to save</param>
         /// <param name="filePath">Path where to save the mapping file</param>
@@ -93,6 +93,69 @@ namespace CsvMapper.Services
         }
 
         /// <summary>
+        /// Saves multiple mapping results to a JSON file
+        /// </summary>
+        /// <param name="multiMappingResult">The multiple mapping results to save</param>
+        /// <param name="filePath">Path where to save the mapping file</param>
+        /// <returns>True if saving was successful</returns>
+        public async Task<bool> SaveMultiMappingsAsync(MultiMappingResult multiMappingResult, string filePath)
+        {
+            try
+            {
+                string json = JsonConvert.SerializeObject(multiMappingResult, Formatting.Indented);
+                await File.WriteAllTextAsync(filePath, json);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Loads a mapping result from a JSON file
+        /// </summary>
+        /// <param name="filePath">Path to the mapping JSON file</param>
+        /// <returns>The loaded mapping result</returns>
+        public async Task<MultiMappingResult> LoadMappingsAsync(string filePath)
+        {
+            if (!File.Exists(filePath))
+            {
+                return new MultiMappingResult();
+            }
+
+            try
+            {
+                string json = await File.ReadAllTextAsync(filePath);
+                
+                // Try to deserialize as MultiMappingResult first (new format)
+                MultiMappingResult? multiResult = null;
+                try
+                {
+                    multiResult = JsonConvert.DeserializeObject<MultiMappingResult>(json);
+                }
+                catch
+                {
+                    // If failed, it might be the old format (single mapping)
+                    var singleResult = JsonConvert.DeserializeObject<MappingResult>(json);
+                    if (singleResult != null)
+                    {
+                        multiResult = new MultiMappingResult
+                        {
+                            Mappings = new List<MappingResult> { singleResult }
+                        };
+                    }
+                }
+
+                return multiResult ?? new MultiMappingResult();
+            }
+            catch (Exception)
+            {
+                return new MultiMappingResult();
+            }
+        }
+
+        /// <summary>
         /// Attempts to auto-match CSV columns to database columns based on name similarity
         /// </summary>
         /// <param name="csvColumns">Available CSV columns</param>
@@ -103,7 +166,7 @@ namespace CsvMapper.Services
             var matches = new Dictionary<string, string>();
 
             // For simplicity, we'll do basic string matching
-            // In a real implementation, we could use RapidFuzz.Net
+            // In a real implementation, this could use RapidFuzz.Net as mentioned in the requirements
             foreach (var dbColumn in dbColumns)
             {
                 string dbColumnNameLower = dbColumn.Name.ToLowerInvariant();

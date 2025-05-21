@@ -1,5 +1,5 @@
+using CsvMapper.ViewModels;
 using System.Windows.Controls;
-using System.Windows.Data;
 
 namespace CsvMapper.Views
 {
@@ -11,6 +11,17 @@ namespace CsvMapper.Views
         public MappingView()
         {
             InitializeComponent();
+        }
+
+        /// <summary>
+        /// Initializes the view model when the control is loaded
+        /// </summary>
+        private async void UserControl_Loaded(object sender, System.Windows.RoutedEventArgs e)
+        {
+            if (DataContext is MainViewModel viewModel)
+            {
+                await viewModel.InitializeCommand.ExecuteAsync(null);
+            }
         }
     }
 }

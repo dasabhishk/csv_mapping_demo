@@ -13,6 +13,11 @@ namespace CsvMapper.Models
         public string TableName { get; set; } = string.Empty;
 
         /// <summary>
+        /// CSV type that maps to this table (PatientStudy or SeriesInstance)
+        /// </summary>
+        public string CsvType { get; set; } = string.Empty;
+
+        /// <summary>
         /// Columns in the table
         /// </summary>
         public List<DatabaseColumn> Columns { get; set; } = new List<DatabaseColumn>();
