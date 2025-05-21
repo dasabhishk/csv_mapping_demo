@@ -1,4 +1,3 @@
-using CsvMapper.Models;
 using CsvMapper.Services;
 using CsvMapper.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,9 +7,6 @@ using System.Windows;
 
 namespace CsvMapper
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
     public partial class App : Application
     {
         private readonly IHost _host;
@@ -27,15 +23,17 @@ namespace CsvMapper
 
         private void ConfigureServices(IServiceCollection services)
         {
-            // Register services
+            // Services
             services.AddSingleton<ICsvParserService, CsvParserService>();
             services.AddSingleton<ISchemaLoaderService, SchemaLoaderService>();
             services.AddSingleton<IMappingService, MappingService>();
 
-            // Register viewmodels
-            services.AddSingleton<MainViewModel>();
+            // ViewModels
+            services.AddSingleton<MainWindowViewModel>();
+            services.AddSingleton<MainViewModel>(); // For Import and Mapping
+            services.AddSingleton<StagingDatabaseViewModel>();
 
-            // Register main window
+            // Views
             services.AddSingleton<MainWindow>();
         }
 
