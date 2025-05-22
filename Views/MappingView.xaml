@@ -131,6 +131,7 @@
                     <Button Content="Switch to SeriesInstance" 
                             Command="{Binding SwitchMappingTypeCommand}"
                             CommandParameter="{Binding MappingTypes[1]}"
+                            Margin="0,0,10,0"
                             Width="150"
                             Visibility="{Binding MappingTypes[1], Converter={StaticResource NullToInvisibleConverter}}"/>
                 </StackPanel>
@@ -161,7 +162,8 @@
                         Content="Auto-Match Columns" 
                         Command="{Binding AutoMatchColumnsCommand}"
                         IsEnabled="{Binding CurrentMappingType.IsCsvLoaded}"
-                        Width="150"/>
+                        Width="150"
+                        Margin="0,0,10,0"/>
             </Grid>
         </GroupBox>
         
