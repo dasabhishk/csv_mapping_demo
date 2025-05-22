@@ -31,7 +31,7 @@ namespace CsvMapper.ViewModels
         private bool _isLoading;
 
         [ObservableProperty]
-        private string _selectedSchemaFilePath = "stagingdb_details.json";
+        private string _selectedSchemaFilePath = string.Empty;
 
         [ObservableProperty]
         private bool _isSchemaLoaded;
@@ -52,7 +52,7 @@ namespace CsvMapper.ViewModels
         private ObservableCollection<CsvMappingTypeViewModel> _mappingTypes = new();
 
         [ObservableProperty]
-        private CsvMappingTypeViewModel _currentMappingType;
+        private CsvMappingTypeViewModel? _currentMappingType;
 
         [ObservableProperty]
         private bool _canAddNewMapping = true;
