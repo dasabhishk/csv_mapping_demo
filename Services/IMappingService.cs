@@ -23,12 +23,27 @@ namespace CsvMapper.Services
             List<DatabaseColumn> dbColumns);
 
         /// <summary>
-        /// Saves mapping results to a JSON file
+        /// Saves a single mapping result to a JSON file
         /// </summary>
         /// <param name="mappingResult">The mapping result to save</param>
         /// <param name="filePath">Path where to save the mapping file</param>
         /// <returns>True if saving was successful</returns>
         Task<bool> SaveMappingsAsync(MappingResult mappingResult, string filePath);
+
+        /// <summary>
+        /// Saves multiple mapping results to a JSON file
+        /// </summary>
+        /// <param name="multiMappingResult">The multiple mapping results to save</param>
+        /// <param name="filePath">Path where to save the mapping file</param>
+        /// <returns>True if saving was successful</returns>
+        Task<bool> SaveMultiMappingsAsync(MultiMappingResult multiMappingResult, string filePath);
+
+        /// <summary>
+        /// Loads multiple mapping results from a JSON file
+        /// </summary>
+        /// <param name="filePath">Path to the mapping JSON file</param>
+        /// <returns>A <see cref="MultiMappingResult"/> containing the loaded mapping results</returns>
+        Task<MultiMappingResult> LoadMappingsAsync(string filePath);
 
         /// <summary>
         /// Attempts to auto-match CSV columns to database columns based on name similarity

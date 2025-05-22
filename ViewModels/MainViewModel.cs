@@ -31,22 +31,16 @@ namespace CsvMapper.ViewModels
         private bool _isLoading;
 
         [ObservableProperty]
-        private string _selectedCsvFilePath = string.Empty;
-
-        [ObservableProperty]
-        private string _selectedSchemaFilePath = "stagingdb_details.json";
-
-        [ObservableProperty]
-        private bool _isCsvLoaded;
+        private string _selectedSchemaFilePath = string.Empty;
 
         [ObservableProperty]
         private bool _isSchemaLoaded;
 
         [ObservableProperty]
-        private string _selectedTableName = string.Empty;
+        private ObservableCollection<string> _availableCsvTypes = new();
 
         [ObservableProperty]
-        private ObservableCollection<string> _availableTables = new();
+        private string _selectedCsvType = string.Empty;
 
         [ObservableProperty]
         private ObservableCollection<ColumnMappingViewModel> _columnMappings = new();
@@ -54,10 +48,20 @@ namespace CsvMapper.ViewModels
         [ObservableProperty]
         private bool _canSaveMapping;
 
+        [ObservableProperty]
+        private ObservableCollection<CsvMappingTypeViewModel> _mappingTypes = new();
+
+        [ObservableProperty]
+        private CsvMappingTypeViewModel? _currentMappingType;
+
+        [ObservableProperty]
+        private bool _canAddNewMapping = true;
+
+        [ObservableProperty]
+        private MultiMappingResult _savedMappings = new();
+
         // Private backing fields
-        private List<CsvColumn> _csvColumns = new();
         private DatabaseSchema _databaseSchema = new();
-        private SchemaTable? _selectedTable;
 
         /// <summary>
         /// Constructor with injected dependencies
@@ -73,31 +77,60 @@ namespace CsvMapper.ViewModels
         }
 
         /// <summary>
-        /// Command to browse and select a CSV file
+        /// Command to initialize the application
         /// </summary>
         [RelayCommand]
-        private async Task BrowseCsvFile()
+        private async Task Initialize()
         {
-            var openFileDialog = new OpenFileDialog
+            await LoadSchemaFile();
+            
+            // Try to load existing mappings
+            try
             {
-                Filter = "CSV files (*.csv)|*.csv",
-                Title = "Select a CSV file"
-            };
-
-            if (openFileDialog.ShowDialog() == true)
+                var existingMappings = await _mappingService.LoadMappingsAsync("mappings.json");
+                if (existingMappings != null && existingMappings.Mappings.Count > 0)
+                {
+                    SavedMappings = existingMappings;
+                    StatusMessage = $"Loaded {existingMappings.Mappings.Count} existing mappings.";
+                }
+            }
+            catch (Exception ex)
             {
-                SelectedCsvFilePath = openFileDialog.FileName;
-                await LoadCsvFile();
+                StatusMessage = $"Note: Could not load existing mappings. Starting fresh. ({ex.Message})";
             }
         }
 
         /// <summary>
-        /// Command to load the CSV file
+        /// Command to browse and select a CSV file for the current mapping type
         /// </summary>
         [RelayCommand]
-        private async Task LoadCsvFile()
+        private async Task BrowseCsvFile()
         {
-            if (string.IsNullOrEmpty(SelectedCsvFilePath) || !File.Exists(SelectedCsvFilePath))
+            if (CurrentMappingType == null)
+            {
+                MessageBox.Show("Please select a CSV type first.", "CSV Type Required", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var openFileDialog = new OpenFileDialog
+            {
+                Filter = "CSV files (*.csv)|*.csv",
+                Title = $"Select a CSV file for {CurrentMappingType.CsvType}"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                CurrentMappingType.CsvFilePath = openFileDialog.FileName;
+                await LoadCsvFile(CurrentMappingType);
+            }
+        }
+
+        /// <summary>
+        /// Load a CSV file for a specific mapping type
+        /// </summary>
+        private async Task LoadCsvFile(CsvMappingTypeViewModel mappingType)
+        {
+            if (string.IsNullOrEmpty(mappingType.CsvFilePath) || !File.Exists(mappingType.CsvFilePath))
             {
                 StatusMessage = "Please select a valid CSV file.";
                 return;
@@ -106,30 +139,27 @@ namespace CsvMapper.ViewModels
             try
             {
                 IsLoading = true;
-                StatusMessage = "Loading CSV file...";
+                StatusMessage = $"Loading CSV file for {mappingType.CsvType}...";
 
-                _csvColumns = await _csvParserService.ParseCsvFileAsync(SelectedCsvFilePath);
-                IsCsvLoaded = _csvColumns.Count > 0;
+                mappingType.CsvColumns = await _csvParserService.ParseCsvFileAsync(mappingType.CsvFilePath);
+                mappingType.IsCsvLoaded = mappingType.CsvColumns.Count > 0;
 
-                if (IsCsvLoaded)
+                if (mappingType.IsCsvLoaded)
                 {
-                    StatusMessage = $"CSV loaded: {_csvColumns.Count} columns found.";
+                    StatusMessage = $"CSV loaded for {mappingType.CsvType}: {mappingType.CsvColumns.Count} columns found.";
                     
-                    // If schema is already loaded, update the mappings
-                    if (IsSchemaLoaded && _selectedTable != null)
-                    {
-                        UpdateColumnMappings();
-                    }
+                    // Update the mappings
+                    UpdateColumnMappings(mappingType);
                 }
                 else
                 {
-                    StatusMessage = "Failed to load columns from CSV file.";
+                    StatusMessage = $"Failed to load columns from CSV file for {mappingType.CsvType}.";
                 }
             }
             catch (Exception ex)
             {
                 StatusMessage = $"Error loading CSV: {ex.Message}";
-                IsCsvLoaded = false;
+                mappingType.IsCsvLoaded = false;
             }
             finally
             {
@@ -180,17 +210,17 @@ namespace CsvMapper.ViewModels
                 {
                     StatusMessage = $"Schema loaded: {_databaseSchema.Tables.Count} tables found.";
                     
-                    // Populate available tables
-                    AvailableTables.Clear();
+                    // Populate available CSV types
+                    AvailableCsvTypes.Clear();
                     foreach (var table in _databaseSchema.Tables)
                     {
-                        AvailableTables.Add(table.TableName);
+                        AvailableCsvTypes.Add(table.CsvType);
                     }
 
-                    // Select the first table by default if available
-                    if (AvailableTables.Count > 0)
+                    // Select the first type by default if available
+                    if (AvailableCsvTypes.Count > 0)
                     {
-                        SelectedTableName = AvailableTables[0];
+                        SelectedCsvType = AvailableCsvTypes[0];
                     }
                 }
                 else
@@ -210,45 +240,77 @@ namespace CsvMapper.ViewModels
         }
 
         /// <summary>
-        /// Updates the column mappings when the selected table changes
+        /// Updates the current mapping type when the selected CSV type changes
         /// </summary>
-        partial void OnSelectedTableNameChanged(string value)
+        partial void OnSelectedCsvTypeChanged(string value)
         {
             if (string.IsNullOrEmpty(value) || !IsSchemaLoaded)
                 return;
 
-            _selectedTable = _databaseSchema.Tables.FirstOrDefault(t => t.TableName == value);
-            
-            if (_selectedTable != null && IsCsvLoaded)
+            // Find the associated table schema
+            var tableSchema = _databaseSchema.Tables.FirstOrDefault(t => t.CsvType == value);
+            if (tableSchema == null)
+                return;
+
+            // Check if we already have a mapping for this type
+            var existingMapping = MappingTypes.FirstOrDefault(m => m.CsvType == value);
+            if (existingMapping != null)
             {
-                UpdateColumnMappings();
+                CurrentMappingType = existingMapping;
+                ColumnMappings = existingMapping.ColumnMappings;
+                return;
             }
-            else
+
+            // Create a new mapping type
+            var newMappingType = new CsvMappingTypeViewModel
             {
-                ColumnMappings.Clear();
+                CsvType = value,
+                TableName = tableSchema.TableName,
+                SchemaTable = tableSchema
+            };
+
+            MappingTypes.Add(newMappingType);
+            CurrentMappingType = newMappingType;
+            ColumnMappings = newMappingType.ColumnMappings;
+
+            // Check if we have a saved mapping for this type
+            var savedMapping = SavedMappings.Mappings.FirstOrDefault(m => m.CsvType == value);
+            if (savedMapping != null)
+            {
+                StatusMessage = $"Found existing mapping for {value}. Loading...";
+                LoadSavedMapping(savedMapping, newMappingType);
             }
+        }
+
+        /// <summary>
+        /// Loads a saved mapping into a mapping type view model
+        /// </summary>
+        private void LoadSavedMapping(MappingResult savedMapping, CsvMappingTypeViewModel mappingType)
+        {
+            // We'll populate the mappings once the CSV file is loaded
+            mappingType.IsCompleted = true;
         }
 
         /// <summary>
         /// Updates the column mappings based on the selected table and CSV columns
         /// </summary>
-        private void UpdateColumnMappings()
+        private void UpdateColumnMappings(CsvMappingTypeViewModel mappingType)
         {
-            if (_selectedTable == null || _csvColumns.Count == 0)
+            if (mappingType.SchemaTable == null || mappingType.CsvColumns.Count == 0)
                 return;
 
-            ColumnMappings.Clear();
+            mappingType.ColumnMappings.Clear();
 
             // Try to auto-match columns
-            var autoMatches = _mappingService.AutoMatchColumns(_csvColumns, _selectedTable.Columns);
+            var autoMatches = _mappingService.AutoMatchColumns(mappingType.CsvColumns, mappingType.SchemaTable.Columns);
 
             // Create view models for each database column
-            foreach (var dbColumn in _selectedTable.Columns)
+            foreach (var dbColumn in mappingType.SchemaTable.Columns)
             {
                 var viewModel = new ColumnMappingViewModel
                 {
                     DbColumn = dbColumn,
-                    AvailableCsvColumns = new ObservableCollection<string>(_csvColumns.Select(c => c.Name))
+                    AvailableCsvColumns = new ObservableCollection<string>(mappingType.CsvColumns.Select(c => c.Name))
                 };
 
                 // Set auto-matched column if available
@@ -258,28 +320,60 @@ namespace CsvMapper.ViewModels
                 }
 
                 // Add sample values if a CSV column is selected
-                UpdateColumnMappingSampleValues(viewModel);
+                UpdateColumnMappingSampleValues(viewModel, mappingType);
 
                 // Subscribe to property changed event to update sample values when selection changes
                 viewModel.PropertyChanged += (s, e) => 
                 {
                     if (e.PropertyName == nameof(ColumnMappingViewModel.SelectedCsvColumn))
                     {
-                        UpdateColumnMappingSampleValues(viewModel);
-                        ValidateMappings();
+                        UpdateColumnMappingSampleValues(viewModel, mappingType);
+                        ValidateMappings(mappingType);
                     }
                 };
 
-                ColumnMappings.Add(viewModel);
+                mappingType.ColumnMappings.Add(viewModel);
             }
 
-            ValidateMappings();
+            // If this is the current mapping type, update the UI
+            if (mappingType == CurrentMappingType)
+            {
+                ColumnMappings = mappingType.ColumnMappings;
+            }
+
+            ValidateMappings(mappingType);
+
+            // Check for saved mappings
+            var savedMapping = SavedMappings.Mappings.FirstOrDefault(m => m.CsvType == mappingType.CsvType);
+            if (savedMapping != null && mappingType.IsCompleted)
+            {
+                ApplySavedMapping(savedMapping, mappingType);
+            }
+        }
+
+        /// <summary>
+        /// Applies a saved mapping to the mapping type
+        /// </summary>
+        private void ApplySavedMapping(MappingResult savedMapping, CsvMappingTypeViewModel mappingType)
+        {
+            foreach (var mapping in savedMapping.ColumnMappings)
+            {
+                var viewModel = mappingType.ColumnMappings.FirstOrDefault(
+                    vm => vm.DbColumn.Name == mapping.DbColumn);
+                
+                if (viewModel != null && mappingType.CsvColumns.Any(c => c.Name == mapping.CsvColumn))
+                {
+                    viewModel.SelectedCsvColumn = mapping.CsvColumn;
+                }
+            }
+
+            ValidateMappings(mappingType);
         }
 
         /// <summary>
         /// Updates the sample values for a column mapping
         /// </summary>
-        private void UpdateColumnMappingSampleValues(ColumnMappingViewModel mappingVm)
+        private void UpdateColumnMappingSampleValues(ColumnMappingViewModel mappingVm, CsvMappingTypeViewModel mappingType)
         {
             if (string.IsNullOrEmpty(mappingVm.SelectedCsvColumn))
             {
@@ -288,7 +382,7 @@ namespace CsvMapper.ViewModels
                 return;
             }
 
-            var csvColumn = _csvColumns.FirstOrDefault(c => c.Name == mappingVm.SelectedCsvColumn);
+            var csvColumn = mappingType.CsvColumns.FirstOrDefault(c => c.Name == mappingVm.SelectedCsvColumn);
             if (csvColumn != null)
             {
                 mappingVm.SampleValues = new ObservableCollection<string>(csvColumn.SampleValues);
@@ -307,9 +401,12 @@ namespace CsvMapper.ViewModels
         [RelayCommand]
         private async Task SaveMappings()
         {
-            if (!ValidateMappings())
+            // Check if we have any valid mappings
+            var completedMappings = MappingTypes.Where(m => m.IsValid).ToList();
+            if (completedMappings.Count == 0)
             {
-                MessageBox.Show("Please fix the validation errors before saving the mapping.", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("No valid mappings to save. Please fix validation errors first.", 
+                    "Validation Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
@@ -327,26 +424,32 @@ namespace CsvMapper.ViewModels
                     IsLoading = true;
                     StatusMessage = "Saving mappings...";
 
-                    // Create the mapping result
-                    var mappingResult = new MappingResult
+                    // Create the multi mapping result
+                    var multiMappingResult = new MultiMappingResult
                     {
-                        TableName = SelectedTableName,
-                        ColumnMappings = ColumnMappings
-                            .Where(m => !string.IsNullOrEmpty(m.SelectedCsvColumn))
-                            .Select(m => new ColumnMapping
-                            {
-                                CsvColumn = m.SelectedCsvColumn,
-                                DbColumn = m.DbColumn.Name
-                            })
-                            .ToList()
+                        Mappings = completedMappings.Select(m => new MappingResult
+                        {
+                            TableName = m.TableName,
+                            CsvType = m.CsvType,
+                            ColumnMappings = m.ColumnMappings
+                                .Where(c => !string.IsNullOrEmpty(c.SelectedCsvColumn))
+                                .Select(c => new ColumnMapping
+                                {
+                                    CsvColumn = c.SelectedCsvColumn,
+                                    DbColumn = c.DbColumn.Name
+                                })
+                                .ToList()
+                        }).ToList()
                     };
 
-                    bool success = await _mappingService.SaveMappingsAsync(mappingResult, saveFileDialog.FileName);
+                    bool success = await _mappingService.SaveMultiMappingsAsync(multiMappingResult, saveFileDialog.FileName);
 
                     if (success)
                     {
+                        SavedMappings = multiMappingResult;
                         StatusMessage = $"Mappings saved successfully to {saveFileDialog.FileName}";
-                        MessageBox.Show("Mappings saved successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                        MessageBox.Show($"Saved {multiMappingResult.Mappings.Count} mappings successfully.", 
+                            "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     else
                     {
@@ -367,26 +470,28 @@ namespace CsvMapper.ViewModels
         }
 
         /// <summary>
-        /// Command to auto-match columns
+        /// Command to auto-match columns for the current mapping type
         /// </summary>
         [RelayCommand]
         private void AutoMatchColumns()
         {
-            if (_selectedTable == null || _csvColumns.Count == 0)
+            if (CurrentMappingType == null || !CurrentMappingType.IsCsvLoaded)
             {
-                StatusMessage = "Both CSV and schema must be loaded to auto-match columns.";
+                StatusMessage = "No CSV file loaded for this mapping type.";
                 return;
             }
 
             try
             {
                 IsLoading = true;
-                StatusMessage = "Auto-matching columns...";
+                StatusMessage = $"Auto-matching columns for {CurrentMappingType.CsvType}...";
 
-                var autoMatches = _mappingService.AutoMatchColumns(_csvColumns, _selectedTable.Columns);
+                var autoMatches = _mappingService.AutoMatchColumns(
+                    CurrentMappingType.CsvColumns, 
+                    CurrentMappingType.SchemaTable.Columns);
                 
                 // Apply auto-matches to the column mappings
-                foreach (var mapping in ColumnMappings)
+                foreach (var mapping in CurrentMappingType.ColumnMappings)
                 {
                     if (autoMatches.TryGetValue(mapping.DbColumn.Name, out var matchedCsvColumn))
                     {
@@ -394,8 +499,8 @@ namespace CsvMapper.ViewModels
                     }
                 }
 
-                ValidateMappings();
-                StatusMessage = $"Auto-matched {autoMatches.Count} columns.";
+                ValidateMappings(CurrentMappingType);
+                StatusMessage = $"Auto-matched {autoMatches.Count} columns for {CurrentMappingType.CsvType}.";
             }
             catch (Exception ex)
             {
@@ -408,21 +513,21 @@ namespace CsvMapper.ViewModels
         }
 
         /// <summary>
-        /// Validates all column mappings
+        /// Validates all column mappings for a mapping type
         /// </summary>
         /// <returns>True if all mappings are valid</returns>
-        private bool ValidateMappings()
+        private bool ValidateMappings(CsvMappingTypeViewModel mappingType)
         {
-            if (_selectedTable == null || ColumnMappings.Count == 0)
+            if (mappingType.SchemaTable == null || mappingType.ColumnMappings.Count == 0)
                 return false;
 
             var errors = _mappingService.ValidateMappings(
-                ColumnMappings.ToList(), 
-                _csvColumns, 
-                _selectedTable.Columns);
+                mappingType.ColumnMappings.ToList(), 
+                mappingType.CsvColumns, 
+                mappingType.SchemaTable.Columns);
 
             // Update validation errors in view models
-            foreach (var mapping in ColumnMappings)
+            foreach (var mapping in mappingType.ColumnMappings)
             {
                 if (errors.TryGetValue(mapping.DbColumn.Name, out var error))
                 {
@@ -436,10 +541,102 @@ namespace CsvMapper.ViewModels
                 }
             }
 
-            // Update the CanSaveMapping property
-            CanSaveMapping = errors.Count == 0 && ColumnMappings.All(m => !string.IsNullOrEmpty(m.SelectedCsvColumn));
+            // Update the mapping type validation status
+            mappingType.IsValid = errors.Count == 0 && 
+                mappingType.ColumnMappings.All(m => !string.IsNullOrEmpty(m.SelectedCsvColumn));
+
+            // If this is the current mapping type, update the UI
+            if (mappingType == CurrentMappingType)
+            {
+                CanSaveMapping = mappingType.IsValid;
+            }
+            
+            // Check if we have valid mappings for both types
+            UpdateCanAddNewMapping();
             
             return errors.Count == 0;
+        }
+
+        /// <summary>
+        /// Updates the CanAddNewMapping flag based on the state of existing mappings
+        /// </summary>
+        private void UpdateCanAddNewMapping()
+        {
+            // Count how many of each CSV type we have
+            int patientStudyCount = MappingTypes.Count(m => m.CsvType == "PatientStudy");
+            int seriesInstanceCount = MappingTypes.Count(m => m.CsvType == "SeriesInstance");
+
+            // We only allow one of each type
+            CanAddNewMapping = patientStudyCount < 1 || seriesInstanceCount < 1;
+        }
+
+        /// <summary>
+        /// Command to switch to a different mapping type
+        /// </summary>
+        [RelayCommand]
+        private void SwitchMappingType(CsvMappingTypeViewModel mappingType)
+        {
+            if (mappingType != null)
+            {
+                CurrentMappingType = mappingType;
+                SelectedCsvType = mappingType.CsvType;
+                ColumnMappings = mappingType.ColumnMappings;
+                StatusMessage = $"Switched to {mappingType.CsvType} mapping.";
+            }
+        }
+
+        /// <summary>
+        /// Command to remove a mapping type
+        /// </summary>
+        [RelayCommand]
+        private void RemoveMappingType(CsvMappingTypeViewModel mappingType)
+        {
+            if (mappingType != null)
+            {
+                MappingTypes.Remove(mappingType);
+                UpdateCanAddNewMapping();
+
+                if (CurrentMappingType == mappingType)
+                {
+                    // Select another mapping type if available
+                    if (MappingTypes.Count > 0)
+                    {
+                        SwitchMappingType(MappingTypes[0]);
+                    }
+                    else
+                    {
+                        CurrentMappingType = null;
+                        ColumnMappings.Clear();
+                    }
+                }
+
+                StatusMessage = $"Removed {mappingType.CsvType} mapping.";
+            }
+        }
+
+        /// <summary>
+        /// Command to initialize a new application session
+        /// </summary>
+        [RelayCommand]
+        private async Task InitializeNewSession()
+        {
+            var result = MessageBox.Show(
+                "This will clear all current mappings. Do you want to continue?",
+                "Clear Mappings",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                MappingTypes.Clear();
+                ColumnMappings.Clear();
+                CurrentMappingType = null;
+                SavedMappings = new MultiMappingResult();
+                CanAddNewMapping = true;
+
+                await LoadSchemaFile();
+                StatusMessage = "Started new mapping session.";
+            }
         }
     }
 }
