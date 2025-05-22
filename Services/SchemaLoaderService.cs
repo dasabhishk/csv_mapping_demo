@@ -26,12 +26,8 @@ namespace CsvMapper.Services
             try
             {
                 string jsonContent = await File.ReadAllTextAsync(filePath);
-                var schema = JsonConvert.DeserializeObject<DatabaseSchema>(jsonContent);
-                
-                if (schema == null)
-                {
-                    throw new InvalidOperationException("Failed to deserialize the schema file to a valid DatabaseSchema object.");
-                }
+                var schema = JsonConvert.DeserializeObject<DatabaseSchema>(jsonContent)
+                             ?? throw new InvalidOperationException("Failed to deserialize the schema file to a valid DatabaseSchema object.");
 
                 return schema;
             }

@@ -202,7 +202,7 @@ namespace CsvMapper.Services
         /// <summary>
         /// Checks if the CSV type is compatible with the database type
         /// </summary>
-        private bool IsTypeCompatible(string csvType, string dbType)
+        private static bool IsTypeCompatible(string csvType, string dbType)
         {
             // Normalize types to lower case for comparison
             csvType = csvType.ToLowerInvariant();
@@ -213,26 +213,15 @@ namespace CsvMapper.Services
                 return true;
 
             // Special compatibility rules
-            switch (dbType)
+            return dbType switch
             {
-                case "string":
-                    // Any type can be stored as string
-                    return true;
-                case "int":
-                    return csvType == "int";
-                case "decimal":
-                case "float":
-                case "double":
-                    return csvType == "int" || csvType == "decimal" || csvType == "float" || csvType == "double";
-                case "datetime":
-                    return csvType == "datetime";
-                case "bool":
-                case "boolean":
-                    return csvType == "bool" || csvType == "boolean";
-                default:
-                    // For unknown types, require exact match
-                    return csvType == dbType;
-            }
+                "string" => true, // Any type can be stored as string
+                "int" => csvType == "int",
+                "decimal" or "float" or "double" => csvType is "int" or "decimal" or "float" or "double",
+                "datetime" => csvType == "datetime",
+                "bool" or "boolean" => csvType is "bool" or "boolean",
+                _ => csvType == dbType // For unknown types, require exact match
+            };
         }
     }
 }
