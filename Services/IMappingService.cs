@@ -39,10 +39,10 @@ namespace CsvMapper.Services
         Task<bool> SaveMultiMappingsAsync(MultiMappingResult multiMappingResult, string filePath);
 
         /// <summary>
-        /// Loads a mapping result from a JSON file
+        /// Loads multiple mapping results from a JSON file
         /// </summary>
         /// <param name="filePath">Path to the mapping JSON file</param>
-        /// <returns>The loaded mapping result</returns>
+        /// <returns>A <see cref="MultiMappingResult"/> containing the loaded mapping results</returns>
         Task<MultiMappingResult> LoadMappingsAsync(string filePath);
 
         /// <summary>
