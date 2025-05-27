@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -31,7 +32,7 @@ namespace CsvMapper.ViewModels
         private bool _isLoading;
 
         [ObservableProperty]
-        private string _selectedSchemaFilePath = string.Empty;
+        private string _selectedSchemaFilePath = "stagingdb_details.json";
 
         [ObservableProperty]
         private bool _isSchemaLoaded;
@@ -310,7 +311,9 @@ namespace CsvMapper.ViewModels
                 var viewModel = new ColumnMappingViewModel
                 {
                     DbColumn = dbColumn,
-                    AvailableCsvColumns = new ObservableCollection<string>(mappingType.CsvColumns.Select(c => c.Name))
+                    AvailableCsvColumns = new ObservableCollection<string>(mappingType.CsvColumns.Select(c => c.Name)),
+                    // Only allow transformations for specific column types and purposes
+                    CanBeTransformed = CanColumnBeTransformed(dbColumn)
                 };
 
                 // Set auto-matched column if available
@@ -370,6 +373,60 @@ namespace CsvMapper.ViewModels
             ValidateMappings(mappingType);
         }
 
+        /// <summary>
+        /// Determines if a column should allow transformations based on schema definition
+        /// </summary>
+        private bool CanColumnBeTransformed(DatabaseColumn column)
+        {
+            // First check if the schema explicitly allows/disallows transformations
+            if (column.CanTransform)
+            {
+                return true;
+            }
+            
+            // If not explicitly set in the schema, use our heuristic rules
+            
+            // Allow transformations for text fields that likely contain names
+            if (column.DataType.ToLower() == "string" && 
+                (column.Name.Contains("Name") || column.Name.Contains("Identifier")))
+            {
+                return true;
+            }
+            
+            // Allow transformations for date fields
+            if (column.DataType.ToLower() == "date" || column.DataType.ToLower().Contains("time"))
+            {
+                return true;
+            }
+            
+            // Allow transformations for gender/category fields
+            if (column.DataType.ToLower() == "string" && 
+                (column.Name.Contains("Gender") || column.Name.Contains("Status") || 
+                 column.Name.Contains("Type") || column.Name.Contains("Category")))
+            {
+                return true;
+            }
+            
+            // Allow transformations for derived value fields (like BirthYear from DOB)
+            if (column.Name.Contains("Year") || column.Name.Contains("Age") || 
+                (column.DataType.ToLower() == "int" && column.Name.Contains("Birth")))
+            {
+                return true;
+            }
+            
+            // Allow transformations for address parts that might need splitting
+            if (column.DataType.ToLower() == "string" && 
+                (column.Name.Contains("Address") || column.Name.Contains("Street") || 
+                 column.Name.Contains("City") || column.Name.Contains("State") || 
+                 column.Name.Contains("Zip") || column.Name.Contains("PostalCode")))
+            {
+                return true;
+            }
+            
+            // By default, don't allow transformations for other columns
+            return false;
+        }
+        
         /// <summary>
         /// Updates the sample values for a column mapping
         /// </summary>
@@ -433,10 +490,27 @@ namespace CsvMapper.ViewModels
                             CsvType = m.CsvType,
                             ColumnMappings = m.ColumnMappings
                                 .Where(c => !string.IsNullOrEmpty(c.SelectedCsvColumn))
-                                .Select(c => new ColumnMapping
+                                .Select(c => 
                                 {
-                                    CsvColumn = c.SelectedCsvColumn,
-                                    DbColumn = c.DbColumn.Name
+                                    // Handle columns with transformations
+                                    if (c.HasTransformation && c.TransformationType.HasValue)
+                                    {
+                                        // Convert parameters dictionary to JSON string
+                                        string parametersJson = System.Text.Json.JsonSerializer.Serialize(c.TransformationParameters);
+                                        
+                                        return ColumnMapping.CreateForDerivedColumn(
+                                            c.SelectedCsvColumn,
+                                            c.DbColumn.Name,
+                                            c.SelectedCsvColumn, // Original source column
+                                            c.TransformationType.Value.ToString(),
+                                            parametersJson
+                                        );
+                                    }
+                                    else
+                                    {
+                                        // For columns without transformations
+                                        return ColumnMapping.Create(c.SelectedCsvColumn, c.DbColumn.Name);
+                                    }
                                 })
                                 .ToList()
                         }).ToList()
@@ -516,7 +590,7 @@ namespace CsvMapper.ViewModels
         /// Validates all column mappings for a mapping type
         /// </summary>
         /// <returns>True if all mappings are valid</returns>
-        private bool ValidateMappings(CsvMappingTypeViewModel mappingType)
+        public bool ValidateMappings(CsvMappingTypeViewModel mappingType)
         {
             if (mappingType.SchemaTable == null || mappingType.ColumnMappings.Count == 0)
                 return false;

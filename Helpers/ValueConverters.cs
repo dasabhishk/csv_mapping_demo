@@ -6,7 +6,7 @@ using System.Windows.Data;
 namespace CsvMapper.Helpers
 {
     /// <summary>
-    /// Converts boolean values to "Loaded" or "Not Loaded" strings
+    /// Converts boolean values to "Yes" or "No" strings
     /// </summary>
     public class BooleanYesNoConverter : IValueConverter
     {

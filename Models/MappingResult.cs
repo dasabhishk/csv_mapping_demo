@@ -3,33 +3,33 @@ using System.Collections.Generic;
 namespace CsvMapper.Models
 {
     /// <summary>
-    /// Represents the final mapping result to be saved to mappings.json
+    /// Represents the result of a mapping operation for a single CSV type to DB table
     /// </summary>
     public class MappingResult
     {
         /// <summary>
-        /// The name of the database table
+        /// Name of the database table
         /// </summary>
         public string TableName { get; set; } = string.Empty;
-
+        
         /// <summary>
-        /// The CSV type associated with this mapping (PatientStudy or SeriesInstance)
+        /// Type of CSV file that maps to this table
         /// </summary>
         public string CsvType { get; set; } = string.Empty;
-
+        
         /// <summary>
-        /// The list of column mappings (CSV to DB)
+        /// Column mappings from CSV to database
         /// </summary>
         public List<ColumnMapping> ColumnMappings { get; set; } = new List<ColumnMapping>();
     }
-
+    
     /// <summary>
-    /// Container for multiple mapping results for different CSV types
+    /// Represents multiple mapping results for different CSV types
     /// </summary>
     public class MultiMappingResult
     {
         /// <summary>
-        /// List of all mappings for different CSV types
+        /// Collection of mapping results for different CSV types
         /// </summary>
         public List<MappingResult> Mappings { get; set; } = new List<MappingResult>();
     }
