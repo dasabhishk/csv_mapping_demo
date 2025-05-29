@@ -82,7 +82,10 @@ namespace CsvMapper.Services
         {
             var errors = new Dictionary<string, string>();
             var warnings = new Dictionary<string, string>();
-            
+            foreach (var vm in mappingViewModels)
+            {
+                vm.ValidationWarning = string.Empty;
+            }
             // Check for duplicate CSV column mappings (especially name fields)
             var csvColumnUsage = mappingViewModels
                 .Where(vm => !string.IsNullOrEmpty(vm.SelectedCsvColumn) && vm.SelectedCsvColumn != "-- No Mapping (Optional) --")
