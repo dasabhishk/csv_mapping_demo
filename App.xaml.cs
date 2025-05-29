@@ -30,7 +30,8 @@ namespace CsvMapper
             // Register services
             services.AddSingleton<ICsvParserService, CsvParserService>();
             services.AddSingleton<ISchemaLoaderService, SchemaLoaderService>();
-            services.AddSingleton<IMappingService, MappingService>();
+            services.AddSingleton<ITransformationService, TransformationService>();
+            services.AddSingleton<IMappingService>(sp => new MappingService(sp.GetRequiredService<ITransformationService>()));
 
             // Register viewmodels
             services.AddSingleton<MainViewModel>();

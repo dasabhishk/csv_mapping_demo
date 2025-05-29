@@ -10,11 +10,15 @@
                 <!-- Application styles here -->
             </ResourceDictionary.MergedDictionaries>
             
+            <!-- Application Services -->
+            <local:ServiceLocator x:Key="ServiceLocator"/>
+            
             <!-- Value Converters -->
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             <helpers:BooleanYesNoConverter x:Key="BooleanYesNoConverter"/>
             <helpers:BooleanValidInvalidConverter x:Key="BooleanValidInvalidConverter"/>
             <helpers:NullToInvisibleConverter x:Key="NullToInvisibleConverter"/>
+            <helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
             
             <!-- Global styles -->
             <Style TargetType="Button">

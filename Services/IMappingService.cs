@@ -1,56 +1,78 @@
 using CsvMapper.Models;
 using CsvMapper.ViewModels;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 
 namespace CsvMapper.Services
 {
     /// <summary>
-    /// Service interface for column mapping operations
+    /// Service interface for managing CSV to database mappings
     /// </summary>
     public interface IMappingService
     {
         /// <summary>
-        /// Validates mappings between CSV and database columns
+        /// Attempts to automatically match CSV columns to database columns
+        /// based on name similarity
         /// </summary>
-        /// <param name="mappings">The list of column mappings to validate</param>
-        /// <param name="csvColumns">Available CSV columns</param>
-        /// <param name="dbColumns">Database columns that need mapping</param>
-        /// <returns>A dictionary of validation errors by column name</returns>
+        /// <param name="csvColumns">Collection of CSV columns</param>
+        /// <param name="dbColumns">List of database columns</param>
+        /// <returns>Dictionary mapping database column names to matched CSV column names</returns>
+        Dictionary<string, string> AutoMatchColumns(ObservableCollection<CsvColumn> csvColumns, List<DatabaseColumn> dbColumns);
+        
+        /// <summary>
+        /// Validates a mapping between CSV columns and database columns
+        /// </summary>
+        /// <param name="mappingViewModels">List of column mapping view models</param>
+        /// <param name="csvColumns">Collection of CSV columns</param>
+        /// <param name="dbColumns">List of database columns</param>
+        /// <returns>Dictionary of validation errors (db column name -> error message)</returns>
         Dictionary<string, string> ValidateMappings(
-            List<ColumnMappingViewModel> mappings, 
-            List<CsvColumn> csvColumns, 
+            List<ColumnMappingViewModel> mappingViewModels, 
+            ObservableCollection<CsvColumn> csvColumns, 
             List<DatabaseColumn> dbColumns);
-
+        
         /// <summary>
-        /// Saves a single mapping result to a JSON file
+        /// Loads mappings from a JSON file
         /// </summary>
-        /// <param name="mappingResult">The mapping result to save</param>
-        /// <param name="filePath">Path where to save the mapping file</param>
-        /// <returns>True if saving was successful</returns>
-        Task<bool> SaveMappingsAsync(MappingResult mappingResult, string filePath);
-
-        /// <summary>
-        /// Saves multiple mapping results to a JSON file
-        /// </summary>
-        /// <param name="multiMappingResult">The multiple mapping results to save</param>
-        /// <param name="filePath">Path where to save the mapping file</param>
-        /// <returns>True if saving was successful</returns>
-        Task<bool> SaveMultiMappingsAsync(MultiMappingResult multiMappingResult, string filePath);
-
-        /// <summary>
-        /// Loads multiple mapping results from a JSON file
-        /// </summary>
-        /// <param name="filePath">Path to the mapping JSON file</param>
-        /// <returns>A <see cref="MultiMappingResult"/> containing the loaded mapping results</returns>
+        /// <param name="filePath">Path to the mappings file</param>
+        /// <returns>MultiMappingResult containing all mappings</returns>
         Task<MultiMappingResult> LoadMappingsAsync(string filePath);
-
+        
         /// <summary>
-        /// Attempts to auto-match CSV columns to database columns based on name similarity
+        /// Saves mappings to a JSON file
         /// </summary>
-        /// <param name="csvColumns">Available CSV columns</param>
-        /// <param name="dbColumns">Database columns that need mapping</param>
-        /// <returns>Dictionary of suggested matches (db column name -> csv column name)</returns>
-        Dictionary<string, string> AutoMatchColumns(List<CsvColumn> csvColumns, List<DatabaseColumn> dbColumns);
+        /// <param name="mappings">MultiMappingResult containing all mappings</param>
+        /// <param name="filePath">Path to the mappings file</param>
+        /// <returns>True if saving was successful</returns>
+        Task<bool> SaveMultiMappingsAsync(MultiMappingResult mappings, string filePath);
+        
+        /// <summary>
+        /// Creates a derived column by applying a transformation to a source column
+        /// </summary>
+        /// <param name="sourceColumn">The source column</param>
+        /// <param name="newColumnName">Name for the derived column</param>
+        /// <param name="transformationType">Type of transformation to apply</param>
+        /// <param name="parameters">Transformation parameters</param>
+        /// <returns>The derived column</returns>
+        DerivedColumn CreateDerivedColumn(
+            CsvColumn sourceColumn, 
+            string newColumnName, 
+            Models.Transformations.TransformationType transformationType, 
+            Dictionary<string, object> parameters);
+        
+        /// <summary>
+        /// Recreates a derived column from a saved mapping
+        /// </summary>
+        /// <param name="sourceColumn">The source column</param>
+        /// <param name="derivedColumnName">The name for the derived column</param>
+        /// <param name="transformationType">Type of transformation as a string</param>
+        /// <param name="transformationParametersJson">JSON string of parameters</param>
+        /// <returns>The derived column or null if recreation fails</returns>
+        DerivedColumn? RecreateTransformedColumn(
+            CsvColumn sourceColumn,
+            string derivedColumnName,
+            string transformationType,
+            string transformationParametersJson);
     }
 }

@@ -162,8 +162,7 @@
                         Content="Auto-Match Columns" 
                         Command="{Binding AutoMatchColumnsCommand}"
                         IsEnabled="{Binding CurrentMappingType.IsCsvLoaded}"
-                        Width="150"
-                        Margin="0,0,10,0"/>
+                        Width="150"/>
             </Grid>
         </GroupBox>
         
@@ -198,6 +197,26 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 
+                <DataGridTemplateColumn Header="Transform" Width="110">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Transform" 
+                                        Command="{Binding OpenTransformationDialogCommand}"
+                                        Width="75"
+                                        Margin="0,0,5,0"
+                                        Visibility="{Binding CanBeTransformed, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <Button Content="✕" 
+                                        Click="ClearTransformButton_Click"
+                                        ToolTip="Clear transformation"
+                                        IsEnabled="{Binding HasTransformation}"
+                                        Width="22"
+                                        Visibility="{Binding HasTransformation, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                
                 <DataGridTextColumn Header="Inferred Type" 
                                     Binding="{Binding InferredType}" 
                                     IsReadOnly="True"
@@ -220,9 +239,16 @@
                 <DataGridTemplateColumn Header="Validation" Width="180">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding ValidationError}" 
-                                       Foreground="Red"
-                                       TextWrapping="Wrap"/>
+                            <StackPanel>
+                                <TextBlock Text="{Binding ValidationError}" 
+                                           Foreground="Red"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                <TextBlock Text="{Binding ValidationWarning}" 
+                                           Foreground="Orange"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding ValidationWarning, Converter={StaticResource StringToVisibilityConverter}}"/>
+                            </StackPanel>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

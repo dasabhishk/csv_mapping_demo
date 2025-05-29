@@ -23,5 +23,3 @@
 ---
  
 ## Description
- 
-<!-- Briefly describe the purpose of this PR and what it addresses -->

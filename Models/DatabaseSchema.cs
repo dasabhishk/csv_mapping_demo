@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace CsvMapper.Models
 {
     /// <summary>
-    /// Represents the complete database schema
+    /// Represents a database schema containing multiple tables
     /// </summary>
     public class DatabaseSchema
     {
@@ -15,6 +15,6 @@ namespace CsvMapper.Models
         /// <summary>
         /// Tables in the database
         /// </summary>
-        public List<SchemaTable> Tables { get; set; } = new List<SchemaTable>();
+        public List<TableSchema> Tables { get; set; } = new List<TableSchema>();
     }
 }
