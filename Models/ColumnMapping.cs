@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace CsvMapper.Models
@@ -33,9 +34,9 @@ namespace CsvMapper.Models
         public string? TransformationType { get; set; }
         
         /// <summary>
-        /// For derived columns, this is a JSON string of transformation parameters
+        /// For derived columns, this contains transformation parameters as a direct object
         /// </summary>
-        public string? TransformationParameters { get; set; }
+        public Dictionary<string, object>? TransformationParameters { get; set; }
         
         /// <summary>
         /// Creates a simple mapping between a CSV column and database column
@@ -61,7 +62,7 @@ namespace CsvMapper.Models
             string dbColumnName, 
             string sourceColumnName, 
             string transformationType, 
-            string transformationParameters)
+            Dictionary<string, object>? transformationParameters)
         {
             return new ColumnMapping
             {

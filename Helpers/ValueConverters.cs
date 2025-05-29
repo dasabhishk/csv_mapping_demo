@@ -60,4 +60,20 @@ namespace CsvMapper.Helpers
             throw new NotImplementedException();
         }
     }
+
+    /// <summary>
+    /// Converts string values to Visibility - empty/null strings become Collapsed, non-empty become Visible
+    /// </summary>
+    public class StringToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return string.IsNullOrEmpty(value as string) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }

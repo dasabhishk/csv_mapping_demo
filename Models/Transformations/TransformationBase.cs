@@ -8,6 +8,8 @@ namespace CsvMapper.Models.Transformations
     /// </summary>
     public abstract class TransformationBase : ITransformation
     {
+        protected Dictionary<string, object> _parameters = new Dictionary<string, object>();
+
         /// <summary>
         /// Gets the type of this transformation
         /// </summary>
@@ -17,6 +19,22 @@ namespace CsvMapper.Models.Transformations
         /// Transforms a single input value
         /// </summary>
         public abstract string Transform(string input, Dictionary<string, object> parameters);
+
+        /// <summary>
+        /// Transforms a single input value with default parameters
+        /// </summary>
+        public virtual string Transform(string input)
+        {
+            return Transform(input, _parameters);
+        }
+
+        /// <summary>
+        /// Gets the current parameters for this transformation
+        /// </summary>
+        public virtual Dictionary<string, object> GetParameters()
+        {
+            return new Dictionary<string, object>(_parameters);
+        }
 
         /// <summary>
         /// Transforms a list of sample values

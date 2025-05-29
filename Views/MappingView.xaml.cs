@@ -5,8 +5,12 @@ using CsvMapper.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Media;
 
 namespace CsvMapper.Views
 {
@@ -28,329 +32,642 @@ namespace CsvMapper.Views
         /// <summary>
         /// Initializes the view model when the control is loaded
         /// </summary>
-        private async void UserControl_Loaded(object sender, System.Windows.RoutedEventArgs e)
+        private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
             if (DataContext is MainViewModel viewModel)
             {
                 await viewModel.InitializeCommand.ExecuteAsync(null);
+                
+                // Subscribe to transformation dialog events from column mappings
+                foreach (var mappingType in viewModel.MappingTypes)
+                {
+                    SubscribeToColumnMappingEvents(mappingType);
+                }
+                
+                // Subscribe to new mapping types being added
+                viewModel.MappingTypes.CollectionChanged += (s, args) =>
+                {
+                    if (args.NewItems != null)
+                    {
+                        foreach (CsvMappingTypeViewModel newMappingType in args.NewItems)
+                        {
+                            SubscribeToColumnMappingEvents(newMappingType);
+                        }
+                    }
+                };
+                
+                // Subscribe to current mapping type changes to ensure events are wired
+                viewModel.PropertyChanged += (s, args) =>
+                {
+                    if (args.PropertyName == nameof(MainViewModel.CurrentMappingType) && viewModel.CurrentMappingType != null)
+                    {
+                        SubscribeToColumnMappingEvents(viewModel.CurrentMappingType);
+                    }
+                    // Also subscribe when ColumnMappings collection changes
+                    if (args.PropertyName == nameof(MainViewModel.ColumnMappings))
+                    {
+                        SubscribeToCurrentColumnMappings(viewModel);
+                    }
+                };
             }
         }
-        
+
         /// <summary>
-        /// Opens the transformation dialog for the selected column mapping
+        /// Subscribes to transformation dialog events for a mapping type
         /// </summary>
-        private void TransformButton_Click(object sender, RoutedEventArgs e)
+        private void SubscribeToColumnMappingEvents(CsvMappingTypeViewModel mappingType)
         {
-            if (sender is Button button && button.DataContext is ColumnMappingViewModel mappingViewModel)
+            if (mappingType?.ColumnMappings == null) return;
+            
+            foreach (var columnMapping in mappingType.ColumnMappings)
             {
-                // Make sure a CSV column is selected
-                if (string.IsNullOrEmpty(mappingViewModel.SelectedCsvColumn))
+                // Unsubscribe first to avoid duplicate subscriptions
+                columnMapping.OpenTransformationDialogRequested -= OnShowTransformationDialog;
+                columnMapping.OpenTransformationDialogRequested += OnShowTransformationDialog;
+            }
+            
+            // Subscribe to new column mappings being added
+            mappingType.ColumnMappings.CollectionChanged += (s, args) =>
+            {
+                if (args.NewItems != null)
                 {
-                    MessageBox.Show("Please select a CSV column to transform.", "Missing Column Selection", 
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-                
-                // Get current mapping type from MainViewModel
-                var mainViewModel = (MainViewModel)DataContext;
-                
-                // Find the source column
-                var sourceColumn = mainViewModel.CurrentMappingType?.CsvColumns.Find(c => c.Name == mappingViewModel.SelectedCsvColumn);
-                if (mainViewModel.CurrentMappingType == null)
-                {
-                    MessageBox.Show("No mapping type is currently selected.", "No Mapping Type", 
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-                if (sourceColumn == null)
-                {
-                    MessageBox.Show($"Could not find source column: {mappingViewModel.SelectedCsvColumn}", 
-                        "Column Not Found", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-                
-                try
-                {
-                    // Create temporary dialog with transformation types
-                    var dialog = new Window()
+                    foreach (ColumnMappingViewModel newColumnMapping in args.NewItems)
                     {
-                        Title = "Apply Column Transformation",
-                        Width = 500,
-                        Height = 400,
-                        WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                        Owner = Window.GetWindow(this)
-                    };
-                    
-                    // Build dialog content
-                    var panel = new StackPanel() { Margin = new Thickness(15) };
-                    
-                    // Header & Column Info
-                    panel.Children.Add(new TextBlock() 
+                        newColumnMapping.OpenTransformationDialogRequested -= OnShowTransformationDialog;
+                        newColumnMapping.OpenTransformationDialogRequested += OnShowTransformationDialog;
+                    }
+                }
+            };
+        }
+
+        /// <summary>
+        /// Subscribes to transformation dialog events for current column mappings
+        /// </summary>
+        private void SubscribeToCurrentColumnMappings(MainViewModel viewModel)
+        {
+            if (viewModel?.ColumnMappings == null) return;
+            
+            foreach (var columnMapping in viewModel.ColumnMappings)
+            {
+                // Unsubscribe first to avoid duplicate subscriptions
+                columnMapping.OpenTransformationDialogRequested -= OnShowTransformationDialog;
+                columnMapping.OpenTransformationDialogRequested += OnShowTransformationDialog;
+            }
+        }
+
+        /// <summary>
+        /// Handles the transformation dialog event
+        /// </summary>
+        private void OnShowTransformationDialog(object? sender, EventArgs e)
+        {
+            if (sender is ColumnMappingViewModel mappingViewModel)
+            {
+                ShowTransformationDialog(mappingViewModel);
+            }
+        }
+
+        /// <summary>
+        /// Shows the transformation dialog for a column mapping
+        /// </summary>
+        private void ShowTransformationDialog(ColumnMappingViewModel mappingViewModel)
+        {
+            // Validate prerequisites
+            if (string.IsNullOrEmpty(mappingViewModel.SelectedCsvColumn))
+            {
+                MessageBox.Show("Please select a CSV column first.", "Column Required", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var mainViewModel = (MainViewModel)DataContext;
+            if (mainViewModel?.CurrentMappingType == null)
+            {
+                MessageBox.Show("No mapping type selected.", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // Show appropriate transformation dialog based on column type
+            ShowTransformationConfigurationDialog(mappingViewModel, 
+                $"Configure Transformation for {mappingViewModel.SelectedCsvColumn}");
+        }
+
+        /// <summary>
+        /// Shows the transformation configuration dialog
+        /// </summary>
+        private void ShowTransformationConfigurationDialog(ColumnMappingViewModel mappingViewModel, string title)
+        {
+            var dialog = new Window
+            {
+                Title = title,
+                Width = 600,
+                Height = 500,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this)
+            };
+
+            var scrollViewer = new ScrollViewer();
+            var mainPanel = new StackPanel { Margin = new Thickness(20) };
+
+            // Header
+            var headerText = new TextBlock
+            {
+                Text = $"Configure Transformation for: {mappingViewModel.SelectedCsvColumn}",
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(0, 0, 0, 20)
+            };
+            mainPanel.Children.Add(headerText);
+
+            // Get available transformations for this column
+            var availableTransformations = mappingViewModel.AvailableTransformations ?? new ObservableCollection<TransformationType>();
+            
+            if (!availableTransformations.Any())
+            {
+                var noTransformText = new TextBlock
+                {
+                    Text = "No transformations available for this column type.",
+                    FontStyle = FontStyles.Italic,
+                    Margin = new Thickness(0, 10, 0, 0)
+                };
+                mainPanel.Children.Add(noTransformText);
+            }
+            else
+            {
+                // Transformation Type Selection
+                var typeLabel = new TextBlock
+                {
+                    Text = "Transformation Type:",
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 5)
+                };
+                mainPanel.Children.Add(typeLabel);
+
+                var transformationComboBox = new ComboBox
+                {
+                    Margin = new Thickness(0, 0, 0, 20),
+                    Height = 30
+                };
+
+                foreach (var transformationType in availableTransformations)
+                {
+                    transformationComboBox.Items.Add(new ComboBoxItem 
                     { 
-                        Text = "Apply Transformation", 
-                        FontSize = 16, 
-                        FontWeight = FontWeights.Bold, 
-                        Margin = new Thickness(0, 0, 0, 10) 
+                        Content = GetTransformationDisplayName(transformationType, mappingViewModel.DbColumn?.Name ?? ""),
+                        Tag = transformationType
                     });
-                    
-                    var infoGrid = new Grid() { Margin = new Thickness(0, 0, 0, 10) };
-                    infoGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-                    infoGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
-                    infoGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-                    infoGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
-                    
-                    var srcLabel = new TextBlock() { Text = "Source:", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 5, 0) };
-                    var srcValue = new TextBlock() { Text = mappingViewModel.SelectedCsvColumn };
-                    var targetLabel = new TextBlock() { Text = "Target:", FontWeight = FontWeights.Bold, Margin = new Thickness(10, 0, 5, 0) };
-                    var targetValue = new TextBlock() { Text = mappingViewModel.DbColumn.Name };
-                    
-                    Grid.SetColumn(srcLabel, 0);
-                    Grid.SetColumn(srcValue, 1);
-                    Grid.SetColumn(targetLabel, 2);
-                    Grid.SetColumn(targetValue, 3);
-                    
-                    infoGrid.Children.Add(srcLabel);
-                    infoGrid.Children.Add(srcValue);
-                    infoGrid.Children.Add(targetLabel);
-                    infoGrid.Children.Add(targetValue);
-                    
-                    panel.Children.Add(infoGrid);
-                    
-                    // Make sure transformations are up-to-date
-                    mappingViewModel.UpdateAvailableTransformations();
-                    
-                    // Create transformation selector
-                    var transformGroup = new GroupBox() { Header = "Transformation Type", Margin = new Thickness(0, 0, 0, 10) };
-                    var transformCombo = new ComboBox() { Margin = new Thickness(5) };
-                    
-                    // Add available transformations to combo
-                    foreach (var type in mappingViewModel.AvailableTransformations)
+                }
+
+                transformationComboBox.SelectedIndex = 0;
+                mainPanel.Children.Add(transformationComboBox);
+
+                // Parameters Panel
+                var parametersPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 20) };
+                mainPanel.Children.Add(parametersPanel);
+
+                // Parameters storage
+                var parameters = new Dictionary<string, object>();
+
+                // Function to update parameters panel based on selected transformation
+                Action updateParametersPanel = () =>
+                {
+                    parametersPanel.Children.Clear();
+                    if (transformationComboBox.SelectedItem is ComboBoxItem selectedItem && 
+                        selectedItem.Tag is TransformationType transformationType)
                     {
-                        string displayName = GetTransformationDisplayName(type, mappingViewModel.DbColumn.Name);
-                        transformCombo.Items.Add(new ComboBoxItem() 
-                        { 
-                            Content = displayName, 
-                            Tag = type 
-                        });
+                        CreateParametersUI(parametersPanel, transformationType, parameters);
                     }
-                    
-                    if (transformCombo.Items.Count > 0)
-                        transformCombo.SelectedIndex = 0;
-                    
-                    transformGroup.Content = transformCombo;
-                    panel.Children.Add(transformGroup);
-                    
-                    // Configuration section
-                    var configGroup = new GroupBox() { Header = "Configuration", Margin = new Thickness(0, 0, 0, 10) };
-                    var configStack = new StackPanel() { Margin = new Thickness(5) };
-                    
-                    // Configuration controls for different transformation types
-                    var splitConfig = new StackPanel() { Margin = new Thickness(5), Visibility = Visibility.Collapsed };
-                    splitConfig.Children.Add(new TextBlock() { Text = "Delimiter:" });
-                    var delimiterTextBox = new TextBox() { Text = " ", Width = 150, HorizontalAlignment = HorizontalAlignment.Left };
-                    splitConfig.Children.Add(delimiterTextBox);
-                    
-                    var dateConfig = new StackPanel() { Margin = new Thickness(5), Visibility = Visibility.Collapsed };
-                    dateConfig.Children.Add(new TextBlock() { Text = "Format:" });
-                    var formatCombo = new ComboBox() { Width = 200, HorizontalAlignment = HorizontalAlignment.Left };
-                    formatCombo.Items.Add(new ComboBoxItem() { Content = "ISO Date (yyyy-MM-dd)", Tag = "yyyy-MM-dd" });
-                    formatCombo.Items.Add(new ComboBoxItem() { Content = "US Date (MM/dd/yyyy)", Tag = "MM/dd/yyyy" });
-                    formatCombo.Items.Add(new ComboBoxItem() { Content = "European (dd/MM/yyyy)", Tag = "dd/MM/yyyy" });
-                    formatCombo.Items.Add(new ComboBoxItem() { Content = "Year Only (yyyy)", Tag = "yyyy" });
-                    if (formatCombo.Items.Count > 0)
-                        formatCombo.SelectedIndex = 0;
-                    dateConfig.Children.Add(formatCombo);
-                    
-                    var categoryConfig = new StackPanel() { Margin = new Thickness(5), Visibility = Visibility.Collapsed };
-                    categoryConfig.Children.Add(new TextBlock() { Text = "Default Value:" });
-                    var defaultValueTextBox = new TextBox() { Width = 150, HorizontalAlignment = HorizontalAlignment.Left };
-                    categoryConfig.Children.Add(defaultValueTextBox);
-                    
-                    configStack.Children.Add(splitConfig);
-                    configStack.Children.Add(dateConfig);
-                    configStack.Children.Add(categoryConfig);
-                    
-                    configGroup.Content = configStack;
-                    panel.Children.Add(configGroup);
-                    
-                    // Update configuration panel when transformation type changes
-                    transformCombo.SelectionChanged += (sender, e) => 
+                };
+
+                // Handle transformation type selection change
+                transformationComboBox.SelectionChanged += (s, e) => updateParametersPanel();
+
+                // Initialize parameters panel
+                updateParametersPanel();
+
+                // Sample Values Preview
+                var previewLabel = new TextBlock
+                {
+                    Text = "Preview (first 3 sample values):",
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 5)
+                };
+                mainPanel.Children.Add(previewLabel);
+
+                var previewPanel = new StackPanel
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(245, 245, 245)),
+                    Margin = new Thickness(0, 0, 0, 20),
+                    MaxHeight = 100
+                };
+                mainPanel.Children.Add(previewPanel);
+
+                // Function to update preview
+                Action updatePreview = () =>
+                {
+                    previewPanel.Children.Clear();
+                    if (transformationComboBox.SelectedItem is ComboBoxItem selectedItem && 
+                        selectedItem.Tag is TransformationType transformationType)
                     {
-                        // Hide all configuration panels
-                        splitConfig.Visibility = Visibility.Collapsed;
-                        dateConfig.Visibility = Visibility.Collapsed;
-                        categoryConfig.Visibility = Visibility.Collapsed;
-                        
-                        // Show appropriate panel based on selection
-                        if (transformCombo.SelectedItem is ComboBoxItem selected && selected.Tag is Models.Transformations.TransformationType type)
-                        {
-                            switch (type)
-                            {
-                                case Models.Transformations.TransformationType.SplitFirstToken:
-                                case Models.Transformations.TransformationType.SplitLastToken:
-                                    splitConfig.Visibility = Visibility.Visible;
-                                    break;
-                                case Models.Transformations.TransformationType.DateFormat:
-                                    dateConfig.Visibility = Visibility.Visible;
-                                    break;
-                                case Models.Transformations.TransformationType.CategoryMapping:
-                                    categoryConfig.Visibility = Visibility.Visible;
-                                    break;
-                            }
-                        }
-                    };
-                    
-                    // Initial selection to show correct panel
-                    if (transformCombo.SelectedItem is ComboBoxItem initial && initial.Tag is Models.Transformations.TransformationType initialType)
-                    {
-                        switch (initialType)
-                        {
-                            case Models.Transformations.TransformationType.SplitFirstToken:
-                            case Models.Transformations.TransformationType.SplitLastToken:
-                                splitConfig.Visibility = Visibility.Visible;
-                                break;
-                            case Models.Transformations.TransformationType.DateFormat:
-                                dateConfig.Visibility = Visibility.Visible;
-                                break;
-                            case Models.Transformations.TransformationType.CategoryMapping:
-                                categoryConfig.Visibility = Visibility.Visible;
-                                break;
-                        }
+                        UpdateTransformationPreview(previewPanel, mappingViewModel, transformationType, parameters);
                     }
-                    
-                    // Buttons
-                    var buttonPanel = new StackPanel() 
-                    { 
-                        Orientation = Orientation.Horizontal,
-                        HorizontalAlignment = HorizontalAlignment.Right,
-                        Margin = new Thickness(0, 10, 0, 0)
-                    };
-                    
-                    var applyButton = new Button() { Content = "Apply", Width = 75, Margin = new Thickness(0, 0, 10, 0) };
-                    var cancelButton = new Button() { Content = "Cancel", Width = 75 };
-                    
-                    buttonPanel.Children.Add(applyButton);
-                    buttonPanel.Children.Add(cancelButton);
-                    
-                    panel.Children.Add(buttonPanel);
-                    
-                    // Add panel to dialog
-                    dialog.Content = panel;
-                    
-                    // Button handlers
-                    bool dialogResult = false;
-                    
-                    applyButton.Click += (s, args) => 
+                };
+
+                // Update preview when parameters change
+                transformationComboBox.SelectionChanged += (s, e) => updatePreview();
+                updatePreview();
+
+                // Buttons
+                var buttonPanel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Margin = new Thickness(0, 20, 0, 0)
+                };
+
+                var okButton = new Button { Content = "Apply Transformation", Width = 150, Margin = new Thickness(0, 0, 10, 0) };
+                var cancelButton = new Button { Content = "Cancel", Width = 80 };
+
+                okButton.Click += (s, e) =>
+                {
+                    if (transformationComboBox.SelectedItem is ComboBoxItem selectedItem && 
+                        selectedItem.Tag is TransformationType transformationType)
                     {
                         try
                         {
-                            // Get selected transformation type
-                            if (transformCombo.SelectedItem is ComboBoxItem selectedItem && 
-                                selectedItem.Tag is Models.Transformations.TransformationType selectedType)
+                            var transformation = _transformationService.CreateTransformation(transformationType, mappingViewModel.SelectedCsvColumn);
+                            
+                            // Apply transformation WITH parameters
+                            mappingViewModel.ApplyTransformation(transformation, parameters);
+                            
+                            // Update validation
+                            var mainViewModel = (MainViewModel)DataContext;
+                            if (mainViewModel?.CurrentMappingType != null)
                             {
-                                // Get transformation parameters
-                                var parameters = new Dictionary<string, object>();
-                                
-                                switch (selectedType)
-                                {
-                                    case Models.Transformations.TransformationType.SplitFirstToken:
-                                    case Models.Transformations.TransformationType.SplitLastToken:
-                                        parameters["Delimiter"] = delimiterTextBox.Text;
-                                        break;
-                                        
-                                    case Models.Transformations.TransformationType.DateFormat:
-                                        string format = "yyyy-MM-dd"; // Default
-                                        if (formatCombo.SelectedItem is ComboBoxItem formatItem)
-                                            format = formatItem.Tag?.ToString() ?? format;
-                                        parameters["TargetFormat"] = format;
-                                        break;
-                                        
-                                    case Models.Transformations.TransformationType.CategoryMapping:
-                                        parameters["DefaultValue"] = defaultValueTextBox.Text ?? "";
-                                        parameters["CaseSensitive"] = false;
-                                        
-                                        // For simplicity, if this is gender mapping, add standard mappings
-                                        if (mappingViewModel.DbColumn.Name.Contains("Gender"))
-                                        {
-                                            var mappings = new Dictionary<string, string>
-                                            {
-                                                { "Male", "M" },
-                                                { "Female", "F" },
-                                                { "M", "M" },
-                                                { "F", "F" },
-                                                { "male", "M" },
-                                                { "female", "F" }
-                                            };
-                                            parameters["Mappings"] = mappings;
-                                        }
-                                        else
-                                        {
-                                            parameters["Mappings"] = new Dictionary<string, string>();
-                                        }
-                                        break;
-                                }
-                                
-                                // Apply transformation to sample values
-                                var originalValues = new List<string>(sourceColumn.SampleValues);
-                                var transformedValues = _transformationService.TransformSamples(
-                                    originalValues,
-                                    selectedType,
-                                    parameters);
-                                
-                                // Update mapping view model
-                                mappingViewModel.HasTransformation = true;
-                                mappingViewModel.TransformationType = selectedType;
-                                mappingViewModel.TransformationParameters = parameters;
-                                mappingViewModel.TransformationDisplayName = selectedItem.Content?.ToString() ?? "Transformation";
-                                mappingViewModel.OriginalSampleValues = new ObservableCollection<string>(originalValues);
-                                mappingViewModel.SampleValues = new ObservableCollection<string>(transformedValues);
-                                
-                                dialogResult = true;
-                                dialog.Close();
+                                mainViewModel.ValidateMappings(mainViewModel.CurrentMappingType);
                             }
+                            
+                            dialog.DialogResult = true;
                         }
                         catch (Exception ex)
                         {
-                            MessageBox.Show($"Error applying transformation: {ex.Message}", 
-                                "Transformation Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                            MessageBox.Show($"Error applying transformation: {ex.Message}", "Error", 
+                                MessageBoxButton.OK, MessageBoxImage.Error);
                         }
-                    };
-                    
-                    cancelButton.Click += (s, args) => 
+                    }
+                };
+                
+                cancelButton.Click += (s, e) => dialog.DialogResult = false;
+
+                buttonPanel.Children.Add(okButton);
+                buttonPanel.Children.Add(cancelButton);
+                mainPanel.Children.Add(buttonPanel);
+            }
+
+            scrollViewer.Content = mainPanel;
+            dialog.Content = scrollViewer;
+            dialog.ShowDialog();
+        }
+
+        /// <summary>
+        /// Creates parameter UI controls based on transformation type
+        /// </summary>
+        private void CreateParametersUI(StackPanel parametersPanel, TransformationType transformationType, Dictionary<string, object> parameters)
+        {
+            switch (transformationType)
+            {
+                case TransformationType.SplitFirstToken:
+                case TransformationType.SplitLastToken:
+                    CreateDelimiterParameterUI(parametersPanel, parameters);
+                    break;
+                
+                case TransformationType.DateFormat:
+                    CreateDateFormatParameterUI(parametersPanel, parameters);
+                    break;
+                
+                case TransformationType.CategoryMapping:
+                    CreateCategoryMappingParameterUI(parametersPanel, parameters);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Creates delimiter parameter UI for split transformations
+        /// </summary>
+        private void CreateDelimiterParameterUI(StackPanel parametersPanel, Dictionary<string, object> parameters)
+        {
+            var delimiterLabel = new TextBlock
+            {
+                Text = "Delimiter:",
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 5)
+            };
+            parametersPanel.Children.Add(delimiterLabel);
+
+            var delimiterComboBox = new ComboBox
+            {
+                Margin = new Thickness(0, 0, 0, 10),
+                Height = 25
+            };
+
+            // Add common delimiters
+            var delimiters = new Dictionary<string, string>
+            {
+                { "Space", " " },
+                { "Comma", "," },
+                { "Semicolon", ";" },
+                { "Tab", "\t" },
+                { "Pipe", "|" },
+                { "Hyphen", "-" },
+                { "Underscore", "_" }
+            };
+
+            foreach (var delimiter in delimiters)
+            {
+                delimiterComboBox.Items.Add(new ComboBoxItem 
+                { 
+                    Content = delimiter.Key,
+                    Tag = delimiter.Value
+                });
+            }
+
+            delimiterComboBox.SelectedIndex = 0; // Default to space
+            delimiterComboBox.SelectionChanged += (s, e) =>
+            {
+                if (delimiterComboBox.SelectedItem is ComboBoxItem selectedItem)
+                {
+                    parameters["Delimiter"] = selectedItem.Tag.ToString();
+                }
+            };
+
+            parametersPanel.Children.Add(delimiterComboBox);
+
+            var helpText = new TextBlock
+            {
+                Text = "Select the character to split on",
+                FontStyle = FontStyles.Italic,
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)),
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            parametersPanel.Children.Add(helpText);
+
+            // Set initial value
+            if (delimiterComboBox.SelectedItem is ComboBoxItem initialItem)
+            {
+                parameters["Delimiter"] = initialItem.Tag.ToString();
+            }
+        }
+
+        /// <summary>
+        /// Creates date format parameter UI
+        /// </summary>
+        private void CreateDateFormatParameterUI(StackPanel parametersPanel, Dictionary<string, object> parameters)
+        {
+            var formatLabel = new TextBlock
+            {
+                Text = "Target Date Format:",
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 5)
+            };
+            parametersPanel.Children.Add(formatLabel);
+
+            var formatComboBox = new ComboBox
+            {
+                Margin = new Thickness(0, 0, 0, 10),
+                Height = 25
+            };
+
+            // Add common date formats
+            var dateFormats = new Dictionary<string, string>
+            {
+                { "ISO8601 (yyyy-MM-dd)", "yyyy-MM-dd" },
+                { "US Format (MM/dd/yyyy)", "MM/dd/yyyy" },
+                { "European (dd/MM/yyyy)", "dd/MM/yyyy" },
+                { "File Friendly (yyyyMMdd)", "yyyyMMdd" },
+                { "Long Date (MMMM d, yyyy)", "MMMM d, yyyy" },
+                { "Year Only (yyyy)", "yyyy" }
+            };
+
+            foreach (var format in dateFormats)
+            {
+                formatComboBox.Items.Add(new ComboBoxItem 
+                { 
+                    Content = format.Key,
+                    Tag = format.Value
+                });
+            }
+
+            formatComboBox.SelectedIndex = 0;
+            formatComboBox.SelectionChanged += (s, e) =>
+            {
+                if (formatComboBox.SelectedItem is ComboBoxItem selectedItem)
+                {
+                    parameters["TargetFormat"] = selectedItem.Tag.ToString();
+                }
+            };
+
+            parametersPanel.Children.Add(formatComboBox);
+
+            var helpText = new TextBlock
+            {
+                Text = "Select the desired output format for dates",
+                FontStyle = FontStyles.Italic,
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)),
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            parametersPanel.Children.Add(helpText);
+
+            // Set initial value
+            if (formatComboBox.SelectedItem is ComboBoxItem initialItem)
+            {
+                parameters["TargetFormat"] = initialItem.Tag.ToString();
+            }
+        }
+
+        /// <summary>
+        /// Creates category mapping parameter UI
+        /// </summary>
+        private void CreateCategoryMappingParameterUI(StackPanel parametersPanel, Dictionary<string, object> parameters)
+        {
+            var mappingLabel = new TextBlock
+            {
+                Text = "Category Mappings:",
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 5)
+            };
+            parametersPanel.Children.Add(mappingLabel);
+
+            var helpText = new TextBlock
+            {
+                Text = "Define how values should be mapped (e.g., Male->M, Female->F)",
+                FontStyle = FontStyles.Italic,
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128)),
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            parametersPanel.Children.Add(helpText);
+
+            // For now, provide a simple text area for category mappings
+            var mappingTextBox = new TextBox
+            {
+                Text = "Male=M\nFemale=F\nUnknown=U",
+                AcceptsReturn = true,
+                Height = 80,
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+
+            mappingTextBox.TextChanged += (s, e) =>
+            {
+                // Parse the mapping text and store in parameters
+                var mappings = new Dictionary<string, string>();
+                var lines = mappingTextBox.Text.Split('\n');
+                foreach (var line in lines)
+                {
+                    var parts = line.Split('=');
+                    if (parts.Length == 2)
                     {
-                        dialogResult = false;
-                        dialog.Close();
-                    };
-                    
-                    // Show dialog
-                    dialog.ShowDialog();
-                    
-                    // Process result
-                    if (dialogResult)
-                    {
-                        // Transformation was applied, update validation
-                        mainViewModel.ValidateMappings(mainViewModel.CurrentMappingType);
+                        mappings[parts[0].Trim()] = parts[1].Trim();
                     }
                 }
-                catch (System.Exception ex)
+                parameters["Mappings"] = mappings;
+            };
+
+            parametersPanel.Children.Add(mappingTextBox);
+
+            // Set initial value
+            var initialMappings = new Dictionary<string, string>
+            {
+                { "Male", "M" },
+                { "Female", "F" },
+                { "Unknown", "U" }
+            };
+            parameters["Mappings"] = initialMappings;
+        }
+
+        /// <summary>
+        /// Updates the transformation preview with sample values
+        /// </summary>
+        private void UpdateTransformationPreview(StackPanel previewPanel, ColumnMappingViewModel mappingViewModel, TransformationType transformationType, Dictionary<string, object> parameters)
+        {
+            previewPanel.Children.Clear();
+
+            try
+            {
+                var transformation = _transformationService.CreateTransformation(transformationType, mappingViewModel.SelectedCsvColumn);
+                
+                // Parameters are passed directly to Transform method, not stored in transformation
+
+                // Get sample values (first 3)
+                var sampleValues = mappingViewModel.SampleValues?.Take(3).ToList() ?? new List<string>();
+                
+                foreach (var sampleValue in sampleValues)
                 {
-                    MessageBox.Show($"Error applying transformation: {ex.Message}", 
-                        "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    var originalText = new TextBlock
+                    {
+                        Text = $"'{sampleValue}' → ",
+                        Margin = new Thickness(0, 2, 0, 2),
+                        FontFamily = new FontFamily("Consolas")
+                    };
+
+                    var transformedValue = transformation.Transform(sampleValue, parameters);
+                    var transformedText = new TextBlock
+                    {
+                        Text = $"'{transformedValue}'",
+                        Margin = new Thickness(0, 2, 0, 2),
+                        FontFamily = new FontFamily("Consolas"),
+                        FontWeight = FontWeights.Bold,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0, 128, 0))
+                    };
+
+                    var previewRow = new StackPanel { Orientation = Orientation.Horizontal };
+                    previewRow.Children.Add(originalText);
+                    previewRow.Children.Add(transformedText);
+                    
+                    previewPanel.Children.Add(previewRow);
                 }
+
+                if (!sampleValues.Any())
+                {
+                    var noDataText = new TextBlock
+                    {
+                        Text = "No sample data available for preview",
+                        FontStyle = FontStyles.Italic,
+                        Foreground = new SolidColorBrush(Color.FromRgb(128, 128, 128))
+                    };
+                    previewPanel.Children.Add(noDataText);
+                }
+            }
+            catch (Exception ex)
+            {
+                var errorText = new TextBlock
+                {
+                    Text = $"Preview error: {ex.Message}",
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 0, 0)),
+                    FontStyle = FontStyles.Italic
+                };
+                previewPanel.Children.Add(errorText);
+            }
+        }
+
+
+
+        /// <summary>
+        /// Creates a UI element for a transformation option
+        /// </summary>
+        private UIElement CreateTransformationOption(TransformationType transformationType, ColumnMappingViewModel mappingViewModel)
+        {
+            var panel = new StackPanel { Margin = new Thickness(0, 5, 0, 5) };
+            
+            var button = new Button
+            {
+                Content = GetTransformationDisplayName(transformationType, mappingViewModel.DbColumn?.Name ?? ""),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(10, 5, 10, 5)
+            };
+            
+            button.Click += (s, e) => ApplyTransformation(mappingViewModel, transformationType);
+            
+            panel.Children.Add(button);
+            return panel;
+        }
+
+        /// <summary>
+        /// Applies a transformation to a column mapping
+        /// </summary>
+        private void ApplyTransformation(ColumnMappingViewModel mappingViewModel, TransformationType transformationType)
+        {
+            try
+            {
+                var transformation = _transformationService.CreateTransformation(transformationType, mappingViewModel.SelectedCsvColumn);
+                mappingViewModel.ApplyTransformation(transformation);
+                
+                // Update validation
+                var mainViewModel = (MainViewModel)DataContext;
+                if (mainViewModel?.CurrentMappingType != null)
+                {
+                    mainViewModel.ValidateMappings(mainViewModel.CurrentMappingType);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error applying transformation: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
         
-        private string GetTransformationDisplayName(Models.Transformations.TransformationType type, string columnName)
+        private string GetTransformationDisplayName(TransformationType type, string columnName)
         {
             switch (type)
             {
-                case Models.Transformations.TransformationType.SplitFirstToken:
+                case TransformationType.SplitFirstToken:
                     return "Extract First Word";
-                case Models.Transformations.TransformationType.SplitLastToken:
+                case TransformationType.SplitLastToken:
                     return "Extract Last Word";
-                case Models.Transformations.TransformationType.DateFormat:
+                case TransformationType.DateFormat:
                     return columnName.Contains("Year") ? "Extract Year from Date" : "Format Date";
-                case Models.Transformations.TransformationType.CategoryMapping:
+                case TransformationType.CategoryMapping:
                     return columnName.Contains("Gender") ? "Standardize Gender Values" : "Map Categories";
                 default:
                     return type.ToString();

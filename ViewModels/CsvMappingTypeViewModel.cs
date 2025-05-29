@@ -49,7 +49,8 @@ namespace CsvMapper.ViewModels
         /// <summary>
         /// List of CSV columns loaded from the CSV file
         /// </summary>
-        public List<CsvColumn> CsvColumns { get; set; } = new List<CsvColumn>();
+        [ObservableProperty]
+        private ObservableCollection<CsvColumn> _csvColumns = new();
         
         /// <summary>
         /// Flag indicating if this mapping is complete and valid

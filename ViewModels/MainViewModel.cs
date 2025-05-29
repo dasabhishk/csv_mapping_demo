@@ -32,7 +32,7 @@ namespace CsvMapper.ViewModels
         private bool _isLoading;
 
         [ObservableProperty]
-        private string _selectedSchemaFilePath = "stagingdb_details.json";
+        private string _selectedSchemaFilePath = string.Empty;
 
         [ObservableProperty]
         private bool _isSchemaLoaded;
@@ -83,7 +83,7 @@ namespace CsvMapper.ViewModels
         [RelayCommand]
         private async Task Initialize()
         {
-            await LoadSchemaFile();
+            StatusMessage = "Please browse and select a schema JSON file to begin.";
             
             // Try to load existing mappings
             try
@@ -142,7 +142,12 @@ namespace CsvMapper.ViewModels
                 IsLoading = true;
                 StatusMessage = $"Loading CSV file for {mappingType.CsvType}...";
 
-                mappingType.CsvColumns = await _csvParserService.ParseCsvFileAsync(mappingType.CsvFilePath);
+                var csvColumnsList = await _csvParserService.ParseCsvFileAsync(mappingType.CsvFilePath);
+                mappingType.CsvColumns.Clear();
+                foreach (var column in csvColumnsList)
+                {
+                    mappingType.CsvColumns.Add(column);
+                }
                 mappingType.IsCsvLoaded = mappingType.CsvColumns.Count > 0;
 
                 if (mappingType.IsCsvLoaded)
@@ -183,8 +188,9 @@ namespace CsvMapper.ViewModels
             if (openFileDialog.ShowDialog() == true)
             {
                 SelectedSchemaFilePath = openFileDialog.FileName;
-                await LoadSchemaFile();
+                StatusMessage = $"Selected file: {Path.GetFileName(SelectedSchemaFilePath)}. Click Load to load the schema.";
             }
+            await Task.CompletedTask;
         }
 
         /// <summary>
@@ -193,9 +199,11 @@ namespace CsvMapper.ViewModels
         [RelayCommand]
         private async Task LoadSchemaFile()
         {
+            StatusMessage = $"Load button clicked. Selected file: {SelectedSchemaFilePath}";
+            
             if (string.IsNullOrEmpty(SelectedSchemaFilePath) || !File.Exists(SelectedSchemaFilePath))
             {
-                StatusMessage = "Please select a valid schema JSON file.";
+                StatusMessage = $"Invalid file path. Selected: '{SelectedSchemaFilePath}', Exists: {File.Exists(SelectedSchemaFilePath ?? "")}";
                 return;
             }
 
@@ -203,6 +211,13 @@ namespace CsvMapper.ViewModels
             {
                 IsLoading = true;
                 StatusMessage = "Loading schema file...";
+
+                // Clear any existing data first
+                _databaseSchema = null!;
+                AvailableCsvTypes.Clear();
+                MappingTypes.Clear();
+                CurrentMappingType = null;
+                IsSchemaLoaded = false;
 
                 _databaseSchema = await _schemaLoaderService.LoadSchemaAsync(SelectedSchemaFilePath);
                 IsSchemaLoaded = _databaseSchema.Tables.Count > 0;
@@ -302,25 +317,18 @@ namespace CsvMapper.ViewModels
 
             mappingType.ColumnMappings.Clear();
 
-            // Try to auto-match columns
-            var autoMatches = _mappingService.AutoMatchColumns(mappingType.CsvColumns, mappingType.SchemaTable.Columns);
-
-            // Create view models for each database column
+            // Create view models for each database column (no auto-matching)
             foreach (var dbColumn in mappingType.SchemaTable.Columns)
             {
                 var viewModel = new ColumnMappingViewModel
                 {
                     DbColumn = dbColumn,
-                    AvailableCsvColumns = new ObservableCollection<string>(mappingType.CsvColumns.Select(c => c.Name)),
+                    AvailableCsvColumns = CreateCsvColumnOptions(mappingType.CsvColumns, dbColumn.IsRequired),
                     // Only allow transformations for specific column types and purposes
-                    CanBeTransformed = CanColumnBeTransformed(dbColumn)
+                    CanBeTransformed = CanColumnBeTransformed(dbColumn),
+                    // Start with no column selected - user must manually select
+                    SelectedCsvColumn = string.Empty
                 };
-
-                // Set auto-matched column if available
-                if (autoMatches.TryGetValue(dbColumn.Name, out var matchedCsvColumn))
-                {
-                    viewModel.SelectedCsvColumn = matchedCsvColumn;
-                }
 
                 // Add sample values if a CSV column is selected
                 UpdateColumnMappingSampleValues(viewModel, mappingType);
@@ -331,6 +339,7 @@ namespace CsvMapper.ViewModels
                     if (e.PropertyName == nameof(ColumnMappingViewModel.SelectedCsvColumn))
                     {
                         UpdateColumnMappingSampleValues(viewModel, mappingType);
+                        viewModel.UpdateAvailableTransformations(); // Update available transformations when CSV column is selected
                         ValidateMappings(mappingType);
                     }
                 };
@@ -378,13 +387,24 @@ namespace CsvMapper.ViewModels
         /// </summary>
         private bool CanColumnBeTransformed(DatabaseColumn column)
         {
-            // First check if the schema explicitly allows/disallows transformations
-            if (column.CanTransform)
+            // Always respect explicit schema settings first
+            // If canTransform is explicitly set to true, allow transformations
+            if (column.CanTransform == true)
             {
                 return true;
             }
             
-            // If not explicitly set in the schema, use our heuristic rules
+            // If canTransform is explicitly set to false, never allow transformations
+            // This check needs to be done carefully since CanTransform might be null/default
+            // Check if the property was explicitly set in the JSON by looking at the source
+            // For now, we'll assume any false value means explicitly disabled
+            if (column.CanTransform == false)
+            {
+                return false;
+            }
+            
+            // If canTransform is not explicitly set in the schema (null/default), use heuristic rules
+            // This section would only apply to columns without explicit canTransform settings
             
             // Allow transformations for text fields that likely contain names
             if (column.DataType.ToLower() == "string" && 
@@ -428,13 +448,36 @@ namespace CsvMapper.ViewModels
         }
         
         /// <summary>
+        /// Creates CSV column options including an unmap option for optional columns
+        /// </summary>
+        private ObservableCollection<string> CreateCsvColumnOptions(ObservableCollection<CsvColumn> csvColumns, bool isRequired)
+        {
+            var options = new ObservableCollection<string>();
+            
+            // Add unmap option for optional columns only
+            if (!isRequired)
+            {
+                options.Add("-- No Mapping (Optional) --");
+            }
+            
+            // Add all CSV columns
+            foreach (var column in csvColumns)
+            {
+                options.Add(column.Name);
+            }
+            
+            return options;
+        }
+
+        /// <summary>
         /// Updates the sample values for a column mapping
         /// </summary>
         private void UpdateColumnMappingSampleValues(ColumnMappingViewModel mappingVm, CsvMappingTypeViewModel mappingType)
         {
-            if (string.IsNullOrEmpty(mappingVm.SelectedCsvColumn))
+            if (string.IsNullOrEmpty(mappingVm.SelectedCsvColumn) || mappingVm.SelectedCsvColumn == "-- No Mapping (Optional) --")
             {
                 mappingVm.SampleValues = new ObservableCollection<string>();
+                mappingVm.OriginalSampleValues = new ObservableCollection<string>();
                 mappingVm.InferredType = string.Empty;
                 return;
             }
@@ -442,12 +485,15 @@ namespace CsvMapper.ViewModels
             var csvColumn = mappingType.CsvColumns.FirstOrDefault(c => c.Name == mappingVm.SelectedCsvColumn);
             if (csvColumn != null)
             {
+                // Set both current and original sample values to preserve data for transformations
                 mappingVm.SampleValues = new ObservableCollection<string>(csvColumn.SampleValues);
+                mappingVm.OriginalSampleValues = new ObservableCollection<string>(csvColumn.SampleValues);
                 mappingVm.InferredType = csvColumn.InferredType;
             }
             else
             {
                 mappingVm.SampleValues = new ObservableCollection<string>();
+                mappingVm.OriginalSampleValues = new ObservableCollection<string>();
                 mappingVm.InferredType = string.Empty;
             }
         }
@@ -489,21 +535,19 @@ namespace CsvMapper.ViewModels
                             TableName = m.TableName,
                             CsvType = m.CsvType,
                             ColumnMappings = m.ColumnMappings
-                                .Where(c => !string.IsNullOrEmpty(c.SelectedCsvColumn))
+                                .Where(c => !string.IsNullOrEmpty(c.SelectedCsvColumn) && c.SelectedCsvColumn != "-- No Mapping (Optional) --")
                                 .Select(c => 
                                 {
                                     // Handle columns with transformations
                                     if (c.HasTransformation && c.TransformationType.HasValue)
                                     {
-                                        // Convert parameters dictionary to JSON string
-                                        string parametersJson = System.Text.Json.JsonSerializer.Serialize(c.TransformationParameters);
-                                        
+                                        // Pass parameters dictionary directly (no double serialization)
                                         return ColumnMapping.CreateForDerivedColumn(
                                             c.SelectedCsvColumn,
                                             c.DbColumn.Name,
                                             c.SelectedCsvColumn, // Original source column
                                             c.TransformationType.Value.ToString(),
-                                            parametersJson
+                                            c.TransformationParameters
                                         );
                                     }
                                     else
@@ -611,13 +655,24 @@ namespace CsvMapper.ViewModels
                 else
                 {
                     mapping.ValidationError = string.Empty;
-                    mapping.IsValid = !string.IsNullOrEmpty(mapping.SelectedCsvColumn);
+                    // Optional columns that are unmapped should be considered valid (not highlighted in red)
+                    if (!mapping.DbColumn.IsRequired && (string.IsNullOrEmpty(mapping.SelectedCsvColumn) || mapping.SelectedCsvColumn == "-- No Mapping (Optional) --"))
+                    {
+                        mapping.IsValid = true; // Optional unmapped columns are valid
+                    }
+                    else
+                    {
+                        mapping.IsValid = !string.IsNullOrEmpty(mapping.SelectedCsvColumn) && mapping.SelectedCsvColumn != "-- No Mapping (Optional) --";
+                    }
                 }
             }
 
             // Update the mapping type validation status
+            // Only required columns need to be mapped for the mapping to be valid
             mappingType.IsValid = errors.Count == 0 && 
-                mappingType.ColumnMappings.All(m => !string.IsNullOrEmpty(m.SelectedCsvColumn));
+                mappingType.ColumnMappings
+                    .Where(m => m.DbColumn.IsRequired)
+                    .All(m => !string.IsNullOrEmpty(m.SelectedCsvColumn) && m.SelectedCsvColumn != "-- No Mapping (Optional) --");
 
             // If this is the current mapping type, update the UI
             if (mappingType == CurrentMappingType)

@@ -1,6 +1,7 @@
 using CsvMapper.Models;
 using CsvMapper.ViewModels;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 
 namespace CsvMapper.Services
@@ -14,21 +15,21 @@ namespace CsvMapper.Services
         /// Attempts to automatically match CSV columns to database columns
         /// based on name similarity
         /// </summary>
-        /// <param name="csvColumns">List of CSV columns</param>
+        /// <param name="csvColumns">Collection of CSV columns</param>
         /// <param name="dbColumns">List of database columns</param>
         /// <returns>Dictionary mapping database column names to matched CSV column names</returns>
-        Dictionary<string, string> AutoMatchColumns(List<CsvColumn> csvColumns, List<DatabaseColumn> dbColumns);
+        Dictionary<string, string> AutoMatchColumns(ObservableCollection<CsvColumn> csvColumns, List<DatabaseColumn> dbColumns);
         
         /// <summary>
         /// Validates a mapping between CSV columns and database columns
         /// </summary>
         /// <param name="mappingViewModels">List of column mapping view models</param>
-        /// <param name="csvColumns">List of CSV columns</param>
+        /// <param name="csvColumns">Collection of CSV columns</param>
         /// <param name="dbColumns">List of database columns</param>
         /// <returns>Dictionary of validation errors (db column name -> error message)</returns>
         Dictionary<string, string> ValidateMappings(
             List<ColumnMappingViewModel> mappingViewModels, 
-            List<CsvColumn> csvColumns, 
+            ObservableCollection<CsvColumn> csvColumns, 
             List<DatabaseColumn> dbColumns);
         
         /// <summary>

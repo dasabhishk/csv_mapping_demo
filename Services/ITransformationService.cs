@@ -18,6 +18,14 @@ namespace CsvMapper.Services
         ITransformation GetTransformation(TransformationType type);
         
         /// <summary>
+        /// Creates a transformation instance with default parameters
+        /// </summary>
+        /// <param name="type">The transformation type</param>
+        /// <param name="sourceColumn">The source column name</param>
+        /// <returns>The transformation implementation</returns>
+        ITransformation CreateTransformation(TransformationType type, string sourceColumn);
+        
+        /// <summary>
         /// Creates a derived column by applying a transformation to a source column
         /// </summary>
         /// <param name="sourceColumn">The source column</param>

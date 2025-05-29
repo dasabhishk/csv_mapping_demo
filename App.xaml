@@ -18,6 +18,7 @@
             <helpers:BooleanYesNoConverter x:Key="BooleanYesNoConverter"/>
             <helpers:BooleanValidInvalidConverter x:Key="BooleanValidInvalidConverter"/>
             <helpers:NullToInvisibleConverter x:Key="NullToInvisibleConverter"/>
+            <helpers:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
             
             <!-- Global styles -->
             <Style TargetType="Button">

@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CsvMapper.Models;
 using CsvMapper.Models.Transformations;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -22,6 +23,7 @@ namespace CsvMapper.ViewModels
         /// Selected CSV column name
         /// </summary>
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(OpenTransformationDialogCommand))]
         private string _selectedCsvColumn = string.Empty;
 
         /// <summary>
@@ -97,12 +99,27 @@ namespace CsvMapper.ViewModels
         private ObservableCollection<string> _originalSampleValues = new();
         
         /// <summary>
+        /// Validation warning message for this mapping
+        /// </summary>
+        [ObservableProperty]
+        private string _validationWarning = string.Empty;
+        
+        /// <summary>
+        /// Event that requests opening the transformation dialog
+        /// This is handled by the view to show the actual dialog
+        /// </summary>
+        public event EventHandler? OpenTransformationDialogRequested;
+        
+
+        
+        /// <summary>
         /// Command to open the transformation dialog
         /// </summary>
         [RelayCommand(CanExecute = nameof(CanOpenTransformationDialog))]
         private void OpenTransformationDialog()
         {
-            // This will be implemented to show the transformation dialog
+            // Raise event for the view to handle
+            OpenTransformationDialogRequested?.Invoke(this, EventArgs.Empty);
         }
         
         /// <summary>
@@ -112,7 +129,7 @@ namespace CsvMapper.ViewModels
         private bool CanOpenTransformationDialog()
         {
             // Only allow transformations for columns that are marked as transformable in the schema
-            return CanBeTransformed;
+            return CanBeTransformed && !string.IsNullOrEmpty(SelectedCsvColumn);
         }
         
         /// <summary>
@@ -131,40 +148,103 @@ namespace CsvMapper.ViewModels
         }
         
         /// <summary>
+        /// Applies a transformation to this column mapping
+        /// </summary>
+        /// <param name="transformation">The transformation to apply</param>
+        public void ApplyTransformation(ITransformation transformation)
+        {
+            ApplyTransformation(transformation, new Dictionary<string, object>());
+        }
+        
+        /// <summary>
+        /// Applies a transformation to this column mapping with parameters
+        /// </summary>
+        /// <param name="transformation">The transformation to apply</param>
+        /// <param name="parameters">Parameters for the transformation</param>
+        public void ApplyTransformation(ITransformation transformation, Dictionary<string, object> parameters)
+        {
+            if (transformation == null)
+                return;
+                
+            HasTransformation = true;
+            TransformationType = transformation.Type;
+            TransformationDisplayName = GetTransformationDisplayName(transformation);
+            
+            // Store transformation parameters from UI
+            TransformationParameters.Clear();
+            foreach (var param in parameters)
+            {
+                TransformationParameters[param.Key] = param.Value;
+            }
+            
+            // Apply transformation to sample values with parameters
+            var transformedSamples = new List<string>();
+            foreach (var sample in OriginalSampleValues)
+            {
+                try
+                {
+                    var transformed = transformation.Transform(sample, parameters);
+                    transformedSamples.Add(transformed);
+                }
+                catch
+                {
+                    transformedSamples.Add($"[Error transforming: {sample}]");
+                }
+            }
+            
+            SampleValues = new ObservableCollection<string>(transformedSamples);
+        }
+        
+        /// <summary>
+        /// Gets display name for a transformation
+        /// </summary>
+        private string GetTransformationDisplayName(ITransformation transformation)
+        {
+            return transformation.Type switch
+            {
+                Models.Transformations.TransformationType.SplitFirstToken => "Extract First Word",
+                Models.Transformations.TransformationType.SplitLastToken => "Extract Last Word",
+                Models.Transformations.TransformationType.DateFormat => "Format Date",
+                Models.Transformations.TransformationType.CategoryMapping => "Map Categories",
+                _ => transformation.Type.ToString()
+            };
+        }
+        
+        /// <summary>
         /// Updates available transformations based on the mapping context
         /// </summary>
         public void UpdateAvailableTransformations()
         {
             AvailableTransformations.Clear();
             
-            if (string.IsNullOrEmpty(SelectedCsvColumn))
+            if (string.IsNullOrEmpty(SelectedCsvColumn) || SelectedCsvColumn == "-- No Mapping (Optional) --")
                 return;
                 
-            // Add available transformations based on column types
+            if (!CanBeTransformed)
+                return;
+                
+            // Use unified logic for determining available transformations
+            var columnName = DbColumn.Name.ToLower();
             
-            // For FirstName or LastName columns, add name splitting
-            if (DbColumn.Name.Contains("FirstName") || DbColumn.Name.Contains("LastName"))
+            // Name fields can be split
+            if (columnName.Contains("name"))
             {
                 AvailableTransformations.Add(Models.Transformations.TransformationType.SplitFirstToken);
                 AvailableTransformations.Add(Models.Transformations.TransformationType.SplitLastToken);
             }
             
-            // For date columns, add date formatting
-            if (DbColumn.DataType == "datetime")
+            // Date fields can be formatted
+            if (columnName.Contains("date") || columnName.Contains("time") || columnName.Contains("year") || 
+                DbColumn.DataType?.ToLower() == "datetime" || DbColumn.DataType?.ToLower() == "date")
             {
                 AvailableTransformations.Add(Models.Transformations.TransformationType.DateFormat);
             }
             
-            // For gender or category columns, add category mapping
-            if (DbColumn.Name.Contains("Gender") || DbColumn.Name.Contains("Code"))
+            // Gender and other categorical fields can be mapped
+            if (columnName.Contains("gender") || columnName.Contains("status") || columnName.Contains("type") || 
+                columnName.Contains("code") || columnName.Contains("category"))
             {
                 AvailableTransformations.Add(Models.Transformations.TransformationType.CategoryMapping);
-            }
-            
-            // For year extraction from dates
-            if (DbColumn.Name.Contains("Year") && DbColumn.DataType == "int")
-            {
-                AvailableTransformations.Add(Models.Transformations.TransformationType.DateFormat);
             }
         }
     }

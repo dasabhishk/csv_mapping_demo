@@ -3,6 +3,7 @@ using CsvMapper.Models.Transformations;
 using CsvMapper.ViewModels;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -29,7 +30,7 @@ namespace CsvMapper.Services
         /// Attempts to automatically match CSV columns to database columns
         /// based on name similarity
         /// </summary>
-        public Dictionary<string, string> AutoMatchColumns(List<CsvColumn> csvColumns, List<DatabaseColumn> dbColumns)
+        public Dictionary<string, string> AutoMatchColumns(ObservableCollection<CsvColumn> csvColumns, List<DatabaseColumn> dbColumns)
         {
             var result = new Dictionary<string, string>();
             
@@ -72,13 +73,48 @@ namespace CsvMapper.Services
 
         /// <summary>
         /// Validates a mapping between CSV columns and database columns
+        /// Returns hard validation errors only - warnings are handled separately
         /// </summary>
         public Dictionary<string, string> ValidateMappings(
             List<ViewModels.ColumnMappingViewModel> mappingViewModels, 
-            List<CsvColumn> csvColumns, 
+            ObservableCollection<CsvColumn> csvColumns, 
             List<DatabaseColumn> dbColumns)
         {
             var errors = new Dictionary<string, string>();
+            var warnings = new Dictionary<string, string>();
+            
+            // Check for duplicate CSV column mappings (especially name fields)
+            var csvColumnUsage = mappingViewModels
+                .Where(vm => !string.IsNullOrEmpty(vm.SelectedCsvColumn) && vm.SelectedCsvColumn != "-- No Mapping (Optional) --")
+                .GroupBy(vm => vm.SelectedCsvColumn)
+                .Where(g => g.Count() > 1)
+                .ToList();
+            
+            foreach (var duplicateGroup in csvColumnUsage)
+            {
+                string csvColumnName = duplicateGroup.Key;
+                var mappedDbColumns = duplicateGroup.Select(vm => vm.DbColumn.Name).ToList();
+                
+                // Special handling for name and date/DOB fields - show warning but allow saving
+                if (csvColumnName.ToLower().Contains("name") || 
+                    csvColumnName.ToLower().Contains("date") || 
+                    csvColumnName.ToLower().Contains("dob") ||
+                    csvColumnName.ToLower().Contains("birth"))
+                {
+                    foreach (var vm in duplicateGroup)
+                    {
+                        warnings[vm.DbColumn.Name] = $"WARNING: CSV column '{csvColumnName}' is mapped to multiple fields ({string.Join(", ", mappedDbColumns)}). Consider using transformations to split this field appropriately.";
+                    }
+                }
+                else
+                {
+                    // For non-name/date fields, this is a hard error
+                    foreach (var vm in duplicateGroup)
+                    {
+                        errors[vm.DbColumn.Name] = $"ERROR: CSV column '{csvColumnName}' cannot be mapped to multiple database columns ({string.Join(", ", mappedDbColumns)})";
+                    }
+                }
+            }
             
             foreach (var dbColumn in dbColumns)
             {
@@ -90,14 +126,14 @@ namespace CsvMapper.Services
                 }
                 
                 // Check if required columns are mapped
-                if (dbColumn.IsRequired && string.IsNullOrEmpty(mappingVm.SelectedCsvColumn))
+                if (dbColumn.IsRequired && (string.IsNullOrEmpty(mappingVm.SelectedCsvColumn) || mappingVm.SelectedCsvColumn == "-- No Mapping (Optional) --"))
                 {
                     errors[dbColumn.Name] = "This column is required but not mapped";
                     continue;
                 }
                 
                 // Skip validation for unmapped columns
-                if (string.IsNullOrEmpty(mappingVm.SelectedCsvColumn))
+                if (string.IsNullOrEmpty(mappingVm.SelectedCsvColumn) || mappingVm.SelectedCsvColumn == "-- No Mapping (Optional) --")
                 {
                     continue;
                 }
@@ -181,6 +217,16 @@ namespace CsvMapper.Services
                             }
                         }
                     }
+                }
+            }
+            
+            // Store warnings in the ViewModels for UI display
+            foreach (var warning in warnings)
+            {
+                var mappingVm = mappingViewModels.FirstOrDefault(vm => vm.DbColumn.Name == warning.Key);
+                if (mappingVm != null)
+                {
+                    mappingVm.ValidationWarning = warning.Value;
                 }
             }
             

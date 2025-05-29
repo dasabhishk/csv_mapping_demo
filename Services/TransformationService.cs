@@ -47,6 +47,26 @@ namespace CsvMapper.Services
         }
 
         /// <summary>
+        /// Creates a transformation instance with default parameters
+        /// </summary>
+        public ITransformation CreateTransformation(TransformationType type, string sourceColumn)
+        {
+            switch (type)
+            {
+                case TransformationType.SplitFirstToken:
+                    return new SplitTextTransformation(TransformationType.SplitFirstToken);
+                case TransformationType.SplitLastToken:
+                    return new SplitTextTransformation(TransformationType.SplitLastToken);
+                case TransformationType.DateFormat:
+                    return new DateFormatTransformation();
+                case TransformationType.CategoryMapping:
+                    return new CategoryMappingTransformation();
+                default:
+                    throw new ArgumentException($"Transformation of type {type} is not supported.");
+            }
+        }
+
+        /// <summary>
         /// Creates a derived column by applying a transformation to a source column
         /// </summary>
         public DerivedColumn CreateDerivedColumn(

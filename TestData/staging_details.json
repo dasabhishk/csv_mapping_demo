@@ -1,0 +1,145 @@
+{
+  "databaseName": "MedicalImaging",
+  "tables": [
+    {
+      "tableName": "PatientStudy",
+      "csvType": "PatientStudy",
+      "columns": [
+        {
+          "name": "PatientId",
+          "dataType": "string",
+          "isRequired": true,
+          "maxLength": 50,
+          "description": "Unique identifier for the patient"
+        },
+        {
+          "name": "FirstName",
+          "dataType": "string",
+          "isRequired": true,
+          "maxLength": 100,
+          "canTransform": true,
+          "description": "Patient's first name (requires transformation from PatientName)"
+        },
+        {
+          "name": "LastName",
+          "dataType": "string",
+          "isRequired": true,
+          "maxLength": 100,
+          "canTransform": true,
+          "description": "Patient's last name (requires transformation from PatientName)"
+        },
+        {
+          "name": "BirthDate",
+          "dataType": "datetime",
+          "isRequired": true,
+          "canTransform": true,
+          "description": "Patient's date of birth in ISO format"
+        },
+        {
+          "name": "GenderCode",
+          "dataType": "string",
+          "isRequired": true,
+          "maxLength": 1,
+          "canTransform": true,
+          "description": "Patient's gender code (M/F/O/U)"
+        },
+        {
+          "name": "StudyDate",
+          "dataType": "datetime",
+          "isRequired": true,
+          "description": "Date when the study was performed"
+        },
+        {
+          "name": "StudyDescription",
+          "dataType": "string",
+          "isRequired": false,
+          "maxLength": 200,
+          "description": "Description of the medical study"
+        },
+        {
+          "name": "ReferringPhysicianName",
+          "dataType": "string",
+          "isRequired": false,
+          "maxLength": 150,
+          "canTransform": false,
+          "description": "Name of the referring physician"
+        },
+        {
+          "name": "BirthYear",
+          "dataType": "int",
+          "isRequired": false,
+          "canTransform": true,
+          "description": "Year of birth (extracted from BirthDate)"
+        }
+      ]
+    },
+    {
+      "tableName": "SeriesInstance",
+      "csvType": "SeriesInstance",
+      "columns": [
+        {
+          "name": "SeriesId",
+          "dataType": "string",
+          "isRequired": true,
+          "maxLength": 50,
+          "description": "Unique identifier for the series"
+        },
+        {
+          "name": "StudyId",
+          "dataType": "string",
+          "isRequired": true,
+          "maxLength": 50,
+          "description": "Identifier of the associated study"
+        },
+        {
+          "name": "Modality",
+          "dataType": "string",
+          "isRequired": true,
+          "maxLength": 10,
+          "description": "Type of equipment that acquired the data"
+        },
+        {
+          "name": "SeriesDateTime",
+          "dataType": "datetime",
+          "isRequired": true,
+          "canTransform": true,
+          "description": "Combined date and time when the series was performed (requires transformation)"
+        },
+        {
+          "name": "SeriesDescription",
+          "dataType": "string",
+          "isRequired": false,
+          "maxLength": 200,
+          "description": "Description of the series"
+        },
+        {
+          "name": "BodyPartExamined",
+          "dataType": "string",
+          "isRequired": false,
+          "maxLength": 50,
+          "description": "Body part examined in this series"
+        },
+        {
+          "name": "PatientPosition",
+          "dataType": "string",
+          "isRequired": false,
+          "maxLength": 10,
+          "description": "Position of the patient during the acquisition"
+        },
+        {
+          "name": "NumberOfImages",
+          "dataType": "int",
+          "isRequired": false,
+          "description": "Number of images in the series"
+        },
+        {
+          "name": "SeriesYear",
+          "dataType": "int",
+          "isRequired": false,
+          "canTransform": true,
+          "description": "Year when the series was performed (extracted from SeriesDate)"
+        }
+      ]
+    }
+  ]
+}
